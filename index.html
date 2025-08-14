@@ -1,58 +1,184 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WebRTC Messenger</title>
-  <link rel="stylesheet" href="style.css">
-  <link rel="manifest" href="manifest.json">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>WebRTC Звонки + Чат без сервера</title>
+<style>
+body {font-family: sans-serif; max-width: 800px; margin: auto; padding: 20px;}
+h2,h3 {margin-top: 1em;}
+.card {border: 1px solid #ccc; border-radius: 8px; padding: 10px;}
+.note {margin: 5px 0;}
+.btn {padding: 6px 12px; margin-top: 5px;}
+.sep {border-bottom: 1px solid #ccc; margin: 1em 0;}
+#chatLog {background: #f9f9f9;}
+</style>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>🌐 WebRTC Messenger</h1>
-      <div class="status" id="status">
-        <span class="dot"></span>
-        <span id="statusText">Готов к подключению</span>
-      </div>
-    </header>
 
-    <div class="panel">
-      <div class="role-select">
-        <button id="btnCaller">Я инициатор</button>
-        <button id="btnCallee">Я присоединяюсь</button>
-      </div>
+<h2>WebRTC звонок + чат (без сервера)</h2>
 
-      <div class="code-box">
-        <h3>Ваш код подключения</h3>
-        <textarea id="localCode" readonly></textarea>
-        <div class="buttons">
-          <button id="btnGenerate">Сгенерировать код</button>
-          <button id="btnCopy">Копировать</button>
-        </div>
-      </div>
+<!-- Шаг 1 -->
+<h3>Шаг 1: Выберите роль</h3>
+<div>
+  <button id="btnCaller" class="btn">Я звоню</button>
+  <button id="btnCallee" class="btn">Мне звонят</button>
+</div>
 
-      <div class="code-box">
-        <h3>Код собеседника</h3>
-        <textarea id="remoteCode" placeholder="Вставьте код здесь"></textarea>
-        <button id="btnConnect">Подключиться</button>
-      </div>
-    </div>
+<!-- Шаг 2 -->
+<div class="sep"></div>
+<h3>Шаг 2: Разрешите микрофон</h3>
+<button id="btnMic" class="btn">Включить микрофон</button>
 
-    <div class="chat">
-      <div class="messages" id="messages"></div>
-      <div class="message-input">
-        <input type="text" id="messageInput" placeholder="Введите сообщение...">
-        <button id="btnSend">Отправить</button>
-      </div>
-    </div>
+<!-- Шаг 3 -->
+<div class="sep"></div>
+<h3>Шаг 3: Обмен кодами</h3>
+<div>
+  <textarea id="localCode" rows="4" style="width:100%" readonly></textarea><br>
+  <button id="btnCopy" class="btn">Скопировать мой код</button>
+</div>
+<div>
+  <textarea id="remoteCode" rows="4" style="width:100%" placeholder="Вставьте код собеседника"></textarea><br>
+  <button id="btnPaste" class="btn">Принять код</button>
+</div>
 
-    <div class="call-controls">
-      <button id="btnCall" disabled>📞 Звонок</button>
-      <button id="btnHangup" disabled>📞 Завершить</button>
-    </div>
-  </div>
+<!-- Шаг 4 -->
+<div class="sep"></div>
+<h3>Шаг 4: Чат</h3>
+<div class="card" id="chatLog" style="min-height:120px; max-height:220px; overflow:auto;"></div>
+<input id="chatInput" type="text" placeholder="Сообщение…" style="width:80%">
+<button id="btnSend" class="btn" disabled>Отправить</button>
 
-  <script src="script.js"></script>
+<!-- Шаг 5 -->
+<div class="sep"></div>
+<h3>Звонок</h3>
+<audio id="remoteAudio" autoplay></audio>
+<button id="btnHangup" class="btn" disabled>Завершить звонок</button>
+
+<script>
+(() => {
+  const S = {role:null, pc:null, mic:null, gathered:[], dc:null};
+
+  // UI
+  const btnCaller = document.getElementById('btnCaller');
+  const btnCallee = document.getElementById('btnCallee');
+  const btnMic    = document.getElementById('btnMic');
+  const btnCopy   = document.getElementById('btnCopy');
+  const btnPaste  = document.getElementById('btnPaste');
+  const localCode = document.getElementById('localCode');
+  const remoteCode= document.getElementById('remoteCode');
+  const btnHangup = document.getElementById('btnHangup');
+  const remoteAudio = document.getElementById('remoteAudio');
+  const chatLog  = document.getElementById('chatLog');
+  const chatInput= document.getElementById('chatInput');
+  const btnSend  = document.getElementById('btnSend');
+
+  function chatPrint(who, text){
+    const p = document.createElement('div');
+    p.className = 'note';
+    p.textContent = (who? who+': ' : '') + text;
+    chatLog.appendChild(p);
+    chatLog.scrollTop = chatLog.scrollHeight;
+  }
+
+  function wireDataChannel(dc){
+    S.dc = dc;
+    dc.onopen = ()=>{ btnSend.disabled = false; chatPrint('', 'Чат подключен'); };
+    dc.onclose = ()=>{ btnSend.disabled = true; chatPrint('', 'Чат закрыт'); };
+    dc.onmessage = (ev)=> chatPrint('Собеседник', ev.data);
+  }
+
+  btnSend.onclick = ()=>{
+    const text = chatInput.value.trim();
+    if(!text || !S.dc || S.dc.readyState!=='open') return;
+    S.dc.send(text);
+    chatPrint('Вы', text);
+    chatInput.value = '';
+  };
+  chatInput.addEventListener('keydown', e=>{ if(e.key==='Enter') btnSend.click(); });
+
+  async function initMic(){
+    try{
+      S.mic = await navigator.mediaDevices.getUserMedia({audio:true});
+      alert('Микрофон включен');
+    }catch(e){ alert('Ошибка микрофона: '+e); }
+  }
+
+  function iceServers(){
+    return [{urls: 'stun:stun.l.google.com:19302'}];
+  }
+
+  function pack(obj){
+    return btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
+  }
+  function unpack(str){
+    return JSON.parse(decodeURIComponent(escape(atob(str))));
+  }
+
+  function newPC(){
+    if(S.pc){ try{ S.pc.close(); }catch{} }
+    S.gathered = [];
+    const pc = new RTCPeerConnection({iceServers: iceServers()});
+    S.pc = pc;
+
+    if(S.mic){ for(const t of S.mic.getTracks()) pc.addTrack(t, S.mic); }
+    if(S.role==='caller'){
+      const dc = pc.createDataChannel('chat', {ordered:true});
+      wireDataChannel(dc);
+    } else {
+      pc.ondatachannel = (ev)=> wireDataChannel(ev.channel);
+    }
+
+    pc.ontrack = (ev)=>{ remoteAudio.srcObject = ev.streams[0]; };
+    pc.onicecandidate = (ev)=>{
+      if(ev.candidate) S.gathered.push(ev.candidate);
+      else console.log('ICE complete');
+    };
+    return pc;
+  }
+
+  btnCaller.onclick = ()=>{ S.role='caller'; alert('Выбрана роль: Звонящий'); };
+  btnCallee.onclick = ()=>{ S.role='callee'; alert('Выбрана роль: Принимающий'); };
+  btnMic.onclick = initMic;
+
+  btnCopy.onclick = ()=>{ localCode.select(); document.execCommand('copy'); };
+  
+  btnPaste.onclick = async ()=>{
+    const data = unpack(remoteCode.value.trim());
+    if(!S.pc) newPC();
+    if(data.role==='caller'){
+      // входящий оффер
+      await S.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+      for(const ice of data.ice){ try{ await S.pc.addIceCandidate(new RTCIceCandidate(ice)); }catch{} }
+      const ans = await S.pc.createAnswer();
+      await S.pc.setLocalDescription(ans);
+      await new Promise(r=> S.pc.onicecandidate = e=>{
+        if(e.candidate) S.gathered.push(e.candidate);
+        else r();
+      });
+      localCode.value = pack({role:'callee', sdp:S.pc.localDescription, ice:S.gathered});
+    } else if(data.role==='callee'){
+      // ответ на наш оффер
+      await S.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+      for(const ice of data.ice){ try{ await S.pc.addIceCandidate(new RTCIceCandidate(ice)); }catch{} }
+    }
+  };
+
+  btnCaller.onclick = async ()=>{
+    S.role='caller';
+    if(!S.pc) newPC();
+    const offer = await S.pc.createOffer();
+    await S.pc.setLocalDescription(offer);
+    await new Promise(r=> S.pc.onicecandidate = e=>{
+      if(e.candidate) S.gathered.push(e.candidate);
+      else r();
+    });
+    localCode.value = pack({role:'caller', sdp:S.pc.localDescription, ice:S.gathered});
+    btnHangup.disabled = false;
+  };
+
+  btnHangup.onclick = ()=>{ if(S.pc){S.pc.close();} if(S.dc){S.dc.close();} btnHangup.disabled=true; chatPrint('', 'Вызов завершён'); };
+})();
+</script>
 </body>
 </html>
