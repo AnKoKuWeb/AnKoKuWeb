@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebRTC Messenger</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.json">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🌐 WebRTC Messenger</h1>
+      <div class="status" id="status">
+        <span class="dot"></span>
+        <span id="statusText">Готов к подключению</span>
+      </div>
+    </header>
+
+    <div class="panel">
+      <div class="role-select">
+        <button id="btnCaller">Я инициатор</button>
+        <button id="btnCallee">Я присоединяюсь</button>
+      </div>
+
+      <div class="code-box">
+        <h3>Ваш код подключения</h3>
+        <textarea id="localCode" readonly></textarea>
+        <div class="buttons">
+          <button id="btnGenerate">Сгенерировать код</button>
+          <button id="btnCopy">Копировать</button>
+        </div>
+      </div>
+
+      <div class="code-box">
+        <h3>Код собеседника</h3>
+        <textarea id="remoteCode" placeholder="Вставьте код здесь"></textarea>
+        <button id="btnConnect">Подключиться</button>
+      </div>
+    </div>
+
+    <div class="chat">
+      <div class="messages" id="messages"></div>
+      <div class="message-input">
+        <input type="text" id="messageInput" placeholder="Введите сообщение...">
+        <button id="btnSend">Отправить</button>
+      </div>
+    </div>
+
+    <div class="call-controls">
+      <button id="btnCall" disabled>📞 Звонок</button>
+      <button id="btnHangup" disabled>📞 Завершить</button>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
