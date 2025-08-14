@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>WebRTC Звонки + Чат без сервера</title>
+<title>WebRTC звонок + чат (без сервера)</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#2196f3">
 <style>
@@ -14,6 +14,7 @@ h2,h3 {margin-top: 1em;}
 .btn {padding: 6px 12px; margin-top: 5px;}
 .sep {border-bottom: 1px solid #ccc; margin: 1em 0;}
 #chatLog {background: #f9f9f9;}
+[disabled] {opacity: 0.5; pointer-events: none;}
 </style>
 </head>
 <body>
@@ -30,25 +31,25 @@ h2,h3 {margin-top: 1em;}
 <!-- Шаг 2 -->
 <div class="sep"></div>
 <h3>Шаг 2: Разрешите микрофон</h3>
-<button id="btnMic" class="btn">Включить микрофон</button>
+<button id="btnMic" class="btn" disabled>Включить микрофон</button>
 
 <!-- Шаг 3 -->
 <div class="sep"></div>
 <h3>Шаг 3: Обмен кодами</h3>
 <div>
   <textarea id="localCode" rows="4" style="width:100%" readonly></textarea><br>
-  <button id="btnCopy" class="btn">Скопировать мой код</button>
+  <button id="btnCopy" class="btn" disabled>Скопировать мой код</button>
 </div>
 <div>
   <textarea id="remoteCode" rows="4" style="width:100%" placeholder="Вставьте код собеседника"></textarea><br>
-  <button id="btnPaste" class="btn">Принять код</button>
+  <button id="btnPaste" class="btn" disabled>Принять код</button>
 </div>
 
 <!-- Шаг 4 -->
 <div class="sep"></div>
 <h3>Шаг 4: Чат</h3>
 <div class="card" id="chatLog" style="min-height:120px; max-height:220px; overflow:auto;"></div>
-<input id="chatInput" type="text" placeholder="Сообщение…" style="width:80%">
+<input id="chatInput" type="text" placeholder="Сообщение…" style="width:80%" disabled>
 <button id="btnSend" class="btn" disabled>Отправить</button>
 
 <!-- Шаг 5 -->
@@ -75,6 +76,9 @@ h2,h3 {margin-top: 1em;}
   const chatInput= document.getElementById('chatInput');
   const btnSend  = document.getElementById('btnSend');
 
+  function enable(el){ el.disabled = false; }
+  function disable(el){ el.disabled = true; }
+
   function chatPrint(who, text){
     const p = document.createElement('div');
     p.className = 'note';
@@ -85,8 +89,8 @@ h2,h3 {margin-top: 1em;}
 
   function wireDataChannel(dc){
     S.dc = dc;
-    dc.onopen = ()=>{ btnSend.disabled = false; chatPrint('', 'Чат подключен'); };
-    dc.onclose = ()=>{ btnSend.disabled = true; chatPrint('', 'Чат закрыт'); };
+    dc.onopen = ()=>{ enable(btnSend); enable(chatInput); chatPrint('', 'Чат подключен'); };
+    dc.onclose = ()=>{ disable(btnSend); disable(chatInput); chatPrint('', 'Чат закрыт'); };
     dc.onmessage = (ev)=> chatPrint('Собеседник', ev.data);
   }
 
@@ -103,6 +107,8 @@ h2,h3 {margin-top: 1em;}
     try{
       S.mic = await navigator.mediaDevices.getUserMedia({audio:true});
       alert('Микрофон включен');
+      if(S.role==='caller') startCaller();
+      else if(S.role==='callee') enable(btnPaste);
     }catch(e){ alert('Ошибка микрофона: '+e); }
   }
 
@@ -122,7 +128,6 @@ h2,h3 {margin-top: 1em;}
     S.gathered = [];
     const pc = new RTCPeerConnection({iceServers: iceServers()});
     S.pc = pc;
-
     if(S.mic){ for(const t of S.mic.getTracks()) pc.addTrack(t, S.mic); }
     if(S.role==='caller'){
       const dc = pc.createDataChannel('chat', {ordered:true});
@@ -130,17 +135,13 @@ h2,h3 {margin-top: 1em;}
     } else {
       pc.ondatachannel = (ev)=> wireDataChannel(ev.channel);
     }
-
     pc.ontrack = (ev)=>{ remoteAudio.srcObject = ev.streams[0]; };
-    pc.onicecandidate = (ev)=>{
-      if(ev.candidate) S.gathered.push(ev.candidate);
-    };
+    pc.onicecandidate = (ev)=>{ if(ev.candidate) S.gathered.push(ev.candidate); };
     return pc;
   }
 
-  btnCaller.onclick = async ()=>{
-    S.role='caller';
-    if(!S.pc) newPC();
+  async function startCaller(){
+    newPC();
     const offer = await S.pc.createOffer();
     await S.pc.setLocalDescription(offer);
     await new Promise(r=> S.pc.onicecandidate = e=>{
@@ -148,17 +149,23 @@ h2,h3 {margin-top: 1em;}
       else r();
     });
     localCode.value = pack({role:'caller', sdp:S.pc.localDescription, ice:S.gathered});
-    btnHangup.disabled = true;
-  };
-  btnCallee.onclick = ()=>{ S.role='callee'; alert('Выбрана роль: Принимающий'); };
+    enable(btnCopy);
+    enable(btnPaste); // ждём ответ
+  }
+
+  btnCaller.onclick = ()=>{ S.role='caller'; enable(btnMic); disable(btnCaller); disable(btnCallee); };
+  btnCallee.onclick = ()=>{ S.role='callee'; enable(btnMic); disable(btnCaller); disable(btnCallee); };
   btnMic.onclick = initMic;
 
   btnCopy.onclick = ()=>{ localCode.select(); document.execCommand('copy'); };
-  
+
   btnPaste.onclick = async ()=>{
-    const data = unpack(remoteCode.value.trim());
-    if(!S.pc) newPC();
-    if(data.role==='caller'){
+    const str = remoteCode.value.trim();
+    if(!str) return;
+    const data = unpack(str);
+
+    if(data.role === 'caller' && S.role === 'callee'){
+      newPC();
       await S.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
       for(const ice of data.ice){ try{ await S.pc.addIceCandidate(new RTCIceCandidate(ice)); }catch{} }
       const ans = await S.pc.createAnswer();
@@ -168,18 +175,29 @@ h2,h3 {margin-top: 1em;}
         else r();
       });
       localCode.value = pack({role:'callee', sdp:S.pc.localDescription, ice:S.gathered});
-    } else if(data.role==='callee'){
+      enable(btnCopy); // теперь можно отправить ответ звонящему
+
+    } else if(data.role === 'callee' && S.role === 'caller'){
       await S.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
       for(const ice of data.ice){ try{ await S.pc.addIceCandidate(new RTCIceCandidate(ice)); }catch{} }
+      chatPrint('', 'Соединение установлено');
+      enable(btnHangup);
+
+    } else {
+      alert('Этот код не подходит для вашей роли!');
     }
   };
 
-  btnHangup.onclick = ()=>{ if(S.pc){S.pc.close();} if(S.dc){S.dc.close();} btnHangup.disabled=true; chatPrint('', 'Вызов завершён'); };
+  btnHangup.onclick = ()=>{
+    if(S.pc) S.pc.close();
+    if(S.dc) S.dc.close();
+    disable(btnHangup);
+    chatPrint('', 'Вызов завершён');
+  };
 
-  // Регистрация service worker
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js')
-      .then(() => console.log('Service Worker зарегистрирован'));
+      .then(() => console.log('SW зарегистрирован'));
   }
 })();
 </script>
