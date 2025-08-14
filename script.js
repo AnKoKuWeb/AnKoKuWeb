@@ -1,11 +1,19 @@
-// Конфигурация ICE серверов (STUN)
+// Конфигурация ICE серверов (STUN/TURN)
 const ICE_CONFIG = {
   iceServers: [
+    // Google STUN серверы
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun.qq.com:3478' } // Дополнительный сервер
-  ]
+    
+    // Резервный TURN сервер (бесплатный)
+    {
+      urls: 'turn:numb.viagenie.ca',
+      credential: 'muazkh',
+      username: 'webrtc@live.com'
+    }
+  ],
+  iceTransportPolicy: 'all' // Использовать и STUN и TURN
 };
 
 // Состояние приложения
@@ -14,9 +22,10 @@ const state = {
   dataChannel: null,
   localStream: null,
   remoteStream: null,
-  role: null,
+  role: null, // 'caller' или 'callee'
   iceCandidates: [],
-  isGenerating: false
+  isProcessing: false,
+  isCallActive: false
 };
 
 // Элементы интерфейса
@@ -35,22 +44,25 @@ const ui = {
   btnHangup: document.getElementById('btnHangup'),
   btnCaller: document.getElementById('btnCaller'),
   btnCallee: document.getElementById('btnCallee'),
-  audioElement: new Audio()
+  audioElement: new Audio() // Для удаленного аудио
 };
 
-// Инициализация приложения
+// Инициализация при загрузке страницы
+document.addEventListener('DOMContentLoaded', init);
+
 function init() {
-  checkWebRTCSupport();
   setupEventListeners();
+  checkWebRTCSupport();
   updateUI();
 }
 
 // Проверка поддержки WebRTC
 function checkWebRTCSupport() {
   if (!window.RTCPeerConnection || !window.navigator.mediaDevices?.getUserMedia) {
-    showFatalError("Ваш браузер не поддерживает необходимые технологии WebRTC");
-    throw new Error("WebRTC not supported");
+    showFatalError("Ваш браузер не поддерживает WebRTC. Пожалуйста, используйте Chrome, Firefox или Edge.");
+    return false;
   }
+  return true;
 }
 
 // Настройка обработчиков событий
@@ -68,9 +80,7 @@ function setupEventListeners() {
     if (e.key === 'Enter') sendMessage();
   });
 
-  ui.remoteCode.addEventListener('input', () => {
-    updateUI();
-  });
+  ui.remoteCode.addEventListener('input', updateUI);
 }
 
 // Установка роли (Caller/Callee)
@@ -79,17 +89,16 @@ function setRole(role) {
   
   resetConnection();
   state.role = role;
-  updateUI();
   updateStatus(`Роль: ${role === 'caller' ? 'Инициатор' : 'Получатель'}`, 'info');
+  updateUI();
 }
 
 // Генерация кода подключения
 async function generateConnectionCode() {
-  if (state.isGenerating) return;
-  state.isGenerating = true;
+  if (state.isProcessing) return;
+  state.isProcessing = true;
   
   try {
-    // Валидация
     if (!state.role) {
       throw new Error("Сначала выберите роль");
     }
@@ -106,7 +115,15 @@ async function generateConnectionCode() {
     state.peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
         state.iceCandidates.push(event.candidate.toJSON());
-        console.log("ICE candidate:", event.candidate);
+        console.log("ICE кандидат:", event.candidate);
+      }
+    };
+
+    // Обработка изменения состояния ICE
+    state.peerConnection.oniceconnectionstatechange = () => {
+      console.log("ICE состояние:", state.peerConnection.iceConnectionState);
+      if (state.peerConnection.iceConnectionState === 'failed') {
+        console.error("ICE соединение не удалось");
       }
     };
 
@@ -114,7 +131,8 @@ async function generateConnectionCode() {
     if (state.role === 'caller') {
       state.dataChannel = state.peerConnection.createDataChannel('chat', {
         negotiated: true,
-        id: 0
+        id: 0,
+        ordered: true
       });
       setupDataChannel(state.dataChannel);
     } else {
@@ -125,29 +143,31 @@ async function generateConnectionCode() {
       };
     }
 
-    // Генерация SDP
+    // Генерация SDP предложения/ответа
     let sdp;
     if (state.role === 'caller') {
       sdp = await state.peerConnection.createOffer({
         offerToReceiveAudio: true
       });
+      console.log("SDP предложение:", sdp);
     } else {
       if (!ui.remoteCode.value.trim()) {
         throw new Error("Сначала введите код собеседника");
       }
       
-      // Для получателя сначала нужно установить удаленное описание
+      // Для получателя сначала обрабатываем код
       await processRemoteCode(true);
       sdp = await state.peerConnection.createAnswer();
+      console.log("SDP ответ:", sdp);
     }
 
     await state.peerConnection.setLocalDescription(sdp);
-    console.log("Local description set:", state.peerConnection.localDescription);
+    console.log("Local description установлен:", state.peerConnection.localDescription);
 
-    // Ждем завершения сбора ICE-кандидатов (таймаут 5 сек)
-    await waitForIceGatheringComplete();
+    // Ждем ICE кандидатов (таймаут 5 секунд)
+    await waitForIceCandidates(5000);
 
-    // Формируем код
+    // Формируем код подключения
     const connectionData = {
       sdp: state.peerConnection.localDescription,
       ice: state.iceCandidates,
@@ -161,13 +181,35 @@ async function generateConnectionCode() {
     ui.btnCopy.disabled = false;
 
   } catch (error) {
-    console.error("Generate code error:", error);
+    console.error("Ошибка генерации кода:", error);
     updateStatus(`Ошибка: ${error.message}`, "error");
     resetConnection();
   } finally {
-    state.isGenerating = false;
+    state.isProcessing = false;
     updateUI();
   }
+}
+
+// Ожидание ICE кандидатов
+function waitForIceCandidates(timeout = 3000) {
+  return new Promise((resolve) => {
+    if (state.peerConnection.iceGatheringState === 'complete') {
+      resolve();
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      console.warn("Таймаут ожидания ICE кандидатов");
+      resolve();
+    }, timeout);
+
+    state.peerConnection.onicecandidate = (event) => {
+      if (!event.candidate) {
+        clearTimeout(timer);
+        resolve();
+      }
+    };
+  });
 }
 
 // Обработка кода от собеседника
@@ -179,7 +221,7 @@ async function processRemoteCode(silent = false) {
     }
 
     const remoteData = JSON.parse(decodeURIComponent(atob(remoteCode)));
-    console.log("Remote connection data:", remoteData);
+    console.log("Полученные данные:", remoteData);
 
     if (!state.peerConnection) {
       state.peerConnection = new RTCPeerConnection(ICE_CONFIG);
@@ -191,26 +233,26 @@ async function processRemoteCode(silent = false) {
       new RTCSessionDescription(remoteData.sdp)
     );
 
-    // Добавляем ICE-кандидаты
+    // Добавляем ICE кандидаты
     if (remoteData.ice && remoteData.ice.length > 0) {
       for (const candidate of remoteData.ice) {
         try {
           await state.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
         } catch (iceError) {
-          console.warn("Failed to add ICE candidate:", iceError);
+          console.warn("Ошибка добавления ICE кандидата:", iceError);
         }
       }
     }
 
     if (!silent) {
-      updateStatus("Код принят!", "success");
+      updateStatus("Успешное подключение!", "success");
       ui.btnCall.disabled = false;
     }
 
     return true;
 
   } catch (error) {
-    console.error("Process remote code error:", error);
+    console.error("Ошибка обработки кода:", error);
     if (!silent) {
       updateStatus(`Ошибка: ${error.message}`, "error");
     }
@@ -221,19 +263,19 @@ async function processRemoteCode(silent = false) {
 // Настройка DataChannel
 function setupDataChannel(channel) {
   channel.onopen = () => {
-    console.log("DataChannel opened");
+    console.log("DataChannel открыт");
     updateStatus("Чат подключен", "success");
     updateUI();
   };
 
   channel.onclose = () => {
-    console.log("DataChannel closed");
+    console.log("DataChannel закрыт");
     updateStatus("Чат отключен", "error");
     updateUI();
   };
 
   channel.onerror = (error) => {
-    console.error("DataChannel error:", error);
+    console.error("DataChannel ошибка:", error);
     updateStatus("Ошибка соединения чата", "error");
   };
 
@@ -245,19 +287,15 @@ function setupDataChannel(channel) {
 // Отправка сообщения
 function sendMessage() {
   const message = ui.messageInput.value.trim();
-  if (!message || !state.dataChannel) return;
+  if (!message || !state.dataChannel || state.dataChannel.readyState !== 'open') return;
 
   try {
-    if (state.dataChannel.readyState !== 'open') {
-      throw new Error("Соединение чата не активно");
-    }
-
     state.dataChannel.send(message);
     addMessageToChat(`Вы: ${message}`, "local");
     ui.messageInput.value = '';
   } catch (error) {
-    console.error("Send message error:", error);
-    updateStatus(`Ошибка отправки: ${error.message}`, "error");
+    console.error("Ошибка отправки сообщения:", error);
+    updateStatus("Ошибка отправки", "error");
   }
 }
 
@@ -266,8 +304,13 @@ async function startAudioCall() {
   try {
     updateStatus("Запрос микрофона...", "warning");
     
+    // Получаем доступ к микрофону
     state.localStream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      },
       video: false
     });
 
@@ -281,8 +324,9 @@ async function startAudioCall() {
       if (event.streams && event.streams[0]) {
         state.remoteStream = event.streams[0];
         ui.audioElement.srcObject = state.remoteStream;
-        ui.audioElement.play().catch(e => console.error("Audio play error:", e));
-        updateStatus("Звонок начат!", "success");
+        ui.audioElement.play().catch(e => console.error("Ошибка воспроизведения:", e));
+        updateStatus("Звонок активен", "success");
+        state.isCallActive = true;
       }
     };
 
@@ -290,7 +334,7 @@ async function startAudioCall() {
     ui.btnHangup.disabled = false;
 
   } catch (error) {
-    console.error("Start call error:", error);
+    console.error("Ошибка начала звонка:", error);
     updateStatus(`Ошибка: ${error.message}`, "error");
     
     if (state.localStream) {
@@ -303,66 +347,54 @@ async function startAudioCall() {
 // Завершение звонка
 function hangUpCall() {
   try {
+    // Останавливаем локальные треки
     if (state.localStream) {
       state.localStream.getTracks().forEach(track => track.stop());
       state.localStream = null;
     }
 
+    // Останавливаем удаленные треки
     if (state.remoteStream) {
       state.remoteStream.getTracks().forEach(track => track.stop());
       state.remoteStream = null;
     }
 
+    // Останавливаем аудио элемент
     if (ui.audioElement.srcObject) {
       ui.audioElement.pause();
       ui.audioElement.srcObject = null;
     }
 
     updateStatus("Звонок завершен", "info");
+    state.isCallActive = false;
     ui.btnCall.disabled = false;
     ui.btnHangup.disabled = true;
 
   } catch (error) {
-    console.error("Hang up error:", error);
+    console.error("Ошибка завершения звонка:", error);
   }
 }
 
-// Вспомогательные функции
-function waitForIceGatheringComplete() {
-  return new Promise((resolve) => {
-    if (!state.peerConnection) return resolve();
-
-    if (state.peerConnection.iceGatheringState === 'complete') {
-      resolve();
-    } else {
-      const checkInterval = setInterval(() => {
-        if (state.peerConnection.iceGatheringState === 'complete') {
-          clearInterval(checkInterval);
-          resolve();
-        }
-      }, 100);
-
-      setTimeout(() => {
-        clearInterval(checkInterval);
-        resolve();
-      }, 5000);
-    }
-  });
-}
-
+// Сброс соединения
 function resetConnection() {
   try {
+    // Закрываем соединение
     if (state.peerConnection) {
       state.peerConnection.close();
       state.peerConnection = null;
     }
     
+    // Закрываем DataChannel
     if (state.dataChannel) {
       state.dataChannel.close();
       state.dataChannel = null;
     }
 
+    // Очищаем состояние
     state.iceCandidates = [];
+    state.isCallActive = false;
+
+    // Сбрасываем UI
     ui.localCode.value = '';
     ui.btnCopy.disabled = true;
     ui.btnCall.disabled = true;
@@ -371,10 +403,11 @@ function resetConnection() {
     ui.btnSend.disabled = true;
 
   } catch (error) {
-    console.error("Reset connection error:", error);
+    console.error("Ошибка сброса соединения:", error);
   }
 }
 
+// Добавление сообщения в чат
 function addMessageToChat(message, type) {
   const messageElement = document.createElement('div');
   messageElement.className = `message ${type}`;
@@ -383,6 +416,7 @@ function addMessageToChat(message, type) {
   ui.messages.scrollTop = ui.messages.scrollHeight;
 }
 
+// Копирование локального кода
 function copyLocalCode() {
   try {
     ui.localCode.select();
@@ -392,29 +426,63 @@ function copyLocalCode() {
       ui.btnCopy.textContent = 'Копировать';
     }, 2000);
   } catch (error) {
-    console.error("Copy error:", error);
+    console.error("Ошибка копирования:", error);
     updateStatus("Не удалось скопировать", "error");
   }
 }
 
+// Обновление статуса
 function updateStatus(text, status) {
   ui.statusText.textContent = text;
   ui.status.className = `status ${status}`;
 }
 
+// Обновление интерфейса
 function updateUI() {
   ui.btnCaller.disabled = state.role === 'caller';
   ui.btnCallee.disabled = state.role === 'callee';
-  ui.btnGenerate.disabled = !state.role || state.isGenerating;
+  ui.btnGenerate.disabled = !state.role || state.isProcessing;
   ui.btnConnect.disabled = !state.role || !ui.remoteCode.value.trim();
-  ui.messageInput.disabled = !state.dataChannel || state.dataChannel.readyState !== 'open';
-  ui.btnSend.disabled = ui.messageInput.disabled;
+  ui.btnCopy.disabled = !ui.localCode.value;
+  
+  // Состояние чата
+  const isChatActive = state.dataChannel && state.dataChannel.readyState === 'open';
+  ui.messageInput.disabled = !isChatActive;
+  ui.btnSend.disabled = !isChatActive;
+  
+  // Состояние звонка
+  ui.btnCall.disabled = !state.peerConnection || state.isCallActive;
+  ui.btnHangup.disabled = !state.isCallActive;
 }
 
+// Показать фатальную ошибку
 function showFatalError(message) {
   alert(message);
-  document.body.innerHTML = `<div class="error">${message}</div>`;
+  document.body.innerHTML = `
+    <div style="padding:20px;color:red;font-size:18px;">
+      <h1>Ошибка</h1>
+      <p>${message}</p>
+      <p>Пожалуйста, используйте современный браузер (Chrome, Firefox, Edge)</p>
+    </div>
+  `;
 }
 
-// Запуск приложения
-document.addEventListener('DOMContentLoaded', init);
+// Диагностика соединения (для консоли)
+window.debugConnection = function() {
+  console.log('--- Диагностика соединения ---');
+  console.log('Состояние PeerConnection:', state.peerConnection ? {
+    iceConnectionState: state.peerConnection.iceConnectionState,
+    connectionState: state.peerConnection.connectionState,
+    signalingState: state.peerConnection.signalingState,
+    iceGatheringState: state.peerConnection.iceGatheringState
+  } : 'Не создано');
+  
+  console.log('DataChannel:', state.dataChannel ? {
+    readyState: state.dataChannel.readyState,
+    bufferedAmount: state.dataChannel.bufferedAmount
+  } : 'Не создан');
+  
+  console.log('ICE кандидаты:', state.iceCandidates.length);
+  console.log('Локальный поток:', state.localStream);
+  console.log('Удаленный поток:', state.remoteStream);
+};
