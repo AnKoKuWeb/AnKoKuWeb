@@ -62,7 +62,7 @@ h2,h3 {margin-top: 1em;}
 (() => {
   const S = {role:null, pc:null, mic:null, gathered:[], dc:null};
 
-  // UI
+  // UI элементы
   const btnCaller = document.getElementById('btnCaller');
   const btnCallee = document.getElementById('btnCallee');
   const btnMic    = document.getElementById('btnMic');
@@ -107,8 +107,11 @@ h2,h3 {margin-top: 1em;}
     try{
       S.mic = await navigator.mediaDevices.getUserMedia({audio:true});
       alert('Микрофон включен');
-      if(S.role==='caller') startCaller();
-      else if(S.role==='callee') enable(btnPaste);
+      if(S.role==='caller'){
+        await startCaller(); // гарантированно генерируем код
+      } else if(S.role==='callee'){
+        enable(btnPaste);
+      }
     }catch(e){ alert('Ошибка микрофона: '+e); }
   }
 
@@ -149,12 +152,22 @@ h2,h3 {margin-top: 1em;}
       else r();
     });
     localCode.value = pack({role:'caller', sdp:S.pc.localDescription, ice:S.gathered});
-    enable(btnCopy);
-    enable(btnPaste); // ждём ответ
+    enable(btnCopy);   // <- теперь кнопка копирования всегда активна
+    enable(btnPaste);  // ждём ответ
   }
 
-  btnCaller.onclick = ()=>{ S.role='caller'; enable(btnMic); disable(btnCaller); disable(btnCallee); };
-  btnCallee.onclick = ()=>{ S.role='callee'; enable(btnMic); disable(btnCaller); disable(btnCallee); };
+  btnCaller.onclick = ()=>{ 
+    S.role='caller'; 
+    enable(btnMic); 
+    disable(btnCaller); 
+    disable(btnCallee); 
+  };
+  btnCallee.onclick = ()=>{ 
+    S.role='callee'; 
+    enable(btnMic); 
+    disable(btnCaller); 
+    disable(btnCallee); 
+  };
   btnMic.onclick = initMic;
 
   btnCopy.onclick = ()=>{ localCode.select(); document.execCommand('copy'); };
@@ -175,7 +188,7 @@ h2,h3 {margin-top: 1em;}
         else r();
       });
       localCode.value = pack({role:'callee', sdp:S.pc.localDescription, ice:S.gathered});
-      enable(btnCopy); // теперь можно отправить ответ звонящему
+      enable(btnCopy);
 
     } else if(data.role === 'callee' && S.role === 'caller'){
       await S.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
