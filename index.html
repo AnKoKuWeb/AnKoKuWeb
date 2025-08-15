@@ -6,6 +6,8 @@
   <title>PeerCall — просто позвонить</title>
   <meta name="theme-color" content="#0b1220">
   <link rel="manifest" href="manifest.json">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <style>
     :root{
       --bg:#0b1220; --panel:#0f172a; --ink:#e5e7eb; --muted:#9ca3af; --accent:#22c55e; --accent-ink:#06210f;
@@ -45,6 +47,7 @@
     details{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:rgba(255,255,255,.03)}
     summary{cursor:pointer}
     .float-tip{font-size:12px;color:var(--muted)}
+    .install{margin-left:auto}
   </style>
 </head>
 <body>
@@ -58,6 +61,7 @@
       <span class="badge" id="netHint">STUN: включён</span>
       <span class="badge" id="roleHint">Роль: не выбрана</span>
       <span class="badge" id="callHint">Звонок: нет</span>
+      <button class="btn ghost install" id="btnInstall" hidden>Установить приложение</button>
     </div>
 
     <div class="sep"></div>
@@ -69,7 +73,7 @@
           <button class="btn" id="btnCaller">Я звоню</button>
           <button class="btn" id="btnCallee">Мне звонят</button>
           <label class="note"><input type="checkbox" id="ckStun" checked> Использовать STUN (рекомендуется)</label>
-          <label class="note"><input type="checkbox" id="ckMom" > Режим «для мамы» (больше шрифты, меньше деталей)</label>
+          <label class="note"><input type="checkbox" id="ckMom"> Режим «для мамы» (больше шрифты, меньше деталей)</label>
         </div>
         <div class="sep"></div>
         <h3>Шаг 2 — Микрофон</h3>
@@ -124,7 +128,7 @@
       <ul class="note">
         <li>Код одноразовый и действует только для текущего вызова.</li>
         <li>Если связь не установилась, попробуйте включить Wi‑Fi или другую сеть. Для «железобетона» нужен TURN‑ретранслятор.</li>
-        <li>Для iOS лучше использовать установленную PWA (кнопка «Поделиться» → «На экран Домой»).</li>
+        <li>**Android**: установите как PWA и отключите энергосбережение для приложения, если система его «усыпляет».</li>
       </ul>
     </details>
   </div>
@@ -144,7 +148,8 @@
     btnMake: $('btnMake'), btnCopy: $('btnCopy'), btnShare: $('btnShare'),
     btnAccept: $('btnAccept'), btnPaste: $('btnPaste'),
     remoteAudio: $('remoteAudio'), btnHang: $('btnHang'),
-    statRtt: $('statRtt'), statBit: $('statBit'), statJit: $('statJit')
+    statRtt: $('statRtt'), statBit: $('statBit'), statJit: $('statJit'),
+    btnInstall: $('btnInstall')
   };
 
   const S = {
@@ -156,9 +161,13 @@
     audioCtx: null,
     localAnalyser: null,
     remoteAnalyser: null,
-    statsTimer: null
+    statsTimer: null,
+    wakeLock: null,
+    beforeInstallEvt: null,
+    keepAliveTimer: null
   };
 
+  // ----- UI helpers
   function setStatus(level, text){
     ui.appStatus.classList.remove('ok','warn','bad');
     ui.appStatus.classList.add(level);
@@ -180,18 +189,21 @@
     document.body.style.fontSize = ui.ckMom.checked ? '18px' : '';
   };
 
+  // ----- MIC + AudioContext
   async function ensureMic(){
     if(S.mic) return;
     try{
-      const s = await navigator.mediaDevices.getUserMedia({audio:true, video:false});
+      const s = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}, video:false});
       S.mic = s; ui.micBadge.textContent = 'Микрофон: активен'; ui.micBadge.style.color = '#b7f7cf';
       setupLocalLevelMeter(s);
+      kickAudioPipeline();
     }catch(e){
       setStatus('bad','Микрофон недоступен'); alert('Ошибка микрофона: ' + e.message);
     }
   }
   ui.btnMic.onclick = ensureMic;
 
+  // ----- RTCPeerConnection
   function iceServers(){
     return S.useStun ? [
       {urls:'stun:stun.l.google.com:19302'},
@@ -206,23 +218,51 @@
     S.gathered = [];
     const pc = new RTCPeerConnection({iceServers: iceServers()});
     S.pc = pc;
+
+    // Добавляем аудиодорожки
     if(S.mic){ for(const t of S.mic.getTracks()) pc.addTrack(t, S.mic); }
+
     pc.ontrack = (ev)=>{
       ui.remoteAudio.srcObject = ev.streams[0];
+      // Пытаемся сразу воспроизвести (Android обычно разрешает после пользовательского клика)
+      ui.remoteAudio.play().catch(()=>{});
       setupRemoteLevelMeter(ev.streams[0]);
+      // Активируем медиа-сессию — помогает держать аудио в фоне
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'playing';
+      }
+      kickAudioPipeline();
     };
+
     pc.onicecandidate = (ev)=>{ if(ev.candidate) S.gathered.push(ev.candidate.toJSON()); };
+
     pc.onconnectionstatechange = ()=>{
       const st = pc.connectionState;
       ui.callHint.textContent = 'Звонок: ' + st;
-      if(st==='connected'){ setStatus('ok','На связи'); ui.btnHang.disabled=false; startStats(); }
-      else if(st==='failed'){ setStatus('bad','Не удалось соединиться'); ui.btnHang.disabled=true; stopStats(); }
-      else if(st==='connecting'){ setStatus('warn','Соединяем…'); }
-      else if(st==='disconnected' || st==='closed'){ setStatus('warn','Связь прервана'); ui.btnHang.disabled=true; stopStats(); }
+
+      if(st==='connecting'){ setStatus('warn','Соединяем…'); }
+      if(st==='connected'){
+        setStatus('ok','На связи');
+        ui.btnHang.disabled=false;
+        startStats();
+        enableWakeLock();       // <<< держим устройство бодрым
+        startKeepAlive();       // <<< «пинаем» аудиотракт/вкладку
+      }
+      if(st==='failed'){
+        setStatus('bad','Не удалось соединиться');
+        ui.btnHang.disabled=true;
+        stopStats(); disableWakeLock(); stopKeepAlive();
+      }
+      if(st==='disconnected' || st==='closed'){
+        setStatus('warn','Связь прервана');
+        ui.btnHang.disabled=true;
+        stopStats(); disableWakeLock(); stopKeepAlive();
+      }
     };
     return pc;
   }
 
+  // ----- base64 packers (для кодов)
   function pack(obj){
     const s = JSON.stringify(obj);
     const b64 = btoa(unescape(encodeURIComponent(s))).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
@@ -245,6 +285,7 @@
     });
   }
 
+  // ----- Make/Accept codes
   async function makeCode(){
     if(!S.role){ alert('Выберите роль'); return; }
     await ensureMic();
@@ -290,28 +331,34 @@
   }
   ui.btnAccept.onclick = ()=>acceptCode(false);
 
+  // ----- Clipboard + Share
   ui.btnCopy.onclick = async ()=>{
     try{ await navigator.clipboard.writeText(ui.myCode.value); ui.btnCopy.textContent='Скопировано ✓'; setTimeout(()=>ui.btnCopy.textContent='Копировать',1200); }
     catch(e){ alert('Буфер обмена недоступен'); }
   };
   ui.btnShare.onclick = async ()=>{
-    try{
-      await navigator.share({title:'Код PeerCall', text: ui.myCode.value});
-    }catch{}
+    try{ await navigator.share({title:'Код PeerCall', text: ui.myCode.value}); }catch{}
   };
   ui.btnPaste.onclick = async ()=>{
     try{ const t = await navigator.clipboard.readText(); if(t) ui.peerCode.value = t; }catch{ alert('Буфер обмена недоступен'); }
   };
 
+  // ----- Hangup
   ui.btnHang.onclick = ()=>{
     try{
-      if(S.pc){ S.pc.getSenders().forEach(s=>{ try{s.track && s.track.stop()}catch{} }); S.pc.close(); }
-      S.pc=null; stopStats();
+      if(S.pc){
+        S.pc.getSenders().forEach(s=>{ try{s.track && s.track.stop()}catch{} });
+        S.pc.close();
+      }
+      S.pc=null;
+      stopStats(); disableWakeLock(); stopKeepAlive();
       setStatus('warn','Звонок завершён');
       ui.btnHang.disabled=true; ui.callHint.textContent='Звонок: нет';
+      if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'none';
     }catch{}
   };
 
+  // ----- Level meters
   function setupLocalLevelMeter(stream){
     S.audioCtx = S.audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     const src = S.audioCtx.createMediaStreamSource(stream);
@@ -345,6 +392,7 @@
     requestAnimationFrame(draw);
   }
 
+  // ----- Stats
   function startStats(){
     stopStats();
     S.statsTimer = setInterval(async ()=>{
@@ -356,11 +404,6 @@
           if(report.type==='remote-inbound-rtp' && report.kind==='audio'){
             if(report.roundTripTime) rtt = (report.roundTripTime*1000).toFixed(0)+' мс';
             if(report.jitter) jit = (report.jitter*1000).toFixed(0)+' мс';
-          }
-          if(report.type==='outbound-rtp' && report.kind==='audio'){
-            if(report.bytesSent && report.timestamp){
-              // naive bitrate calc kept internal by browser; we just show available kbps if present
-            }
           }
           if(report.type==='candidate-pair' && report.state==='succeeded'){
             if(report.availableOutgoingBitrate) br = (report.availableOutgoingBitrate/1000).toFixed(0)+' кбит/с';
@@ -374,13 +417,87 @@
   }
   function stopStats(){ if(S.statsTimer){ clearInterval(S.statsTimer); S.statsTimer=null; } }
 
-  // PWA
+  // ====== ANDROID / BACKGROUND TRICKS ======
+
+  // Wake Lock API: держим экран/SoC бодрым во время звонка
+  async function enableWakeLock(){
+    try{
+      if ('wakeLock' in navigator) {
+        S.wakeLock = await navigator.wakeLock.request('screen');
+        S.wakeLock.addEventListener('release', ()=>console.log('WakeLock released'));
+        console.log('WakeLock active');
+      }
+    }catch(e){ console.warn('WakeLock error', e); }
+  }
+  async function disableWakeLock(){
+    try{
+      if (S.wakeLock){ await S.wakeLock.release(); S.wakeLock = null; }
+    }catch{}
+  }
+
+  // «Пинание» аудиотракта: краткий беззвучный нудж раз в 30с,
+  // чтобы вкладку не выгружали в глубокий idle на некоторых прошивках.
+  function startKeepAlive(){
+    stopKeepAlive();
+    // микротик: перезапуск play() и resume() на случай возврата из фона
+    S.keepAliveTimer = setInterval(()=>{
+      kickAudioPipeline();
+      // отправляем ping SW (если жив) — помогает удерживать процесс PWA
+      if (navigator.serviceWorker?.controller) {
+        navigator.serviceWorker.controller.postMessage({type:'ping', t: Date.now()});
+      }
+    }, 30000);
+  }
+  function stopKeepAlive(){
+    if(S.keepAliveTimer){ clearInterval(S.keepAliveTimer); S.keepAliveTimer=null; }
+  }
+
+  // Гарантированно поднимаем воспроизведение/AudioContext
+  function kickAudioPipeline(){
+    try{ ui.remoteAudio.muted = false; ui.remoteAudio.play().catch(()=>{}); }catch{}
+    if (S.audioCtx && S.audioCtx.state !== 'running') {
+      S.audioCtx.resume().catch(()=>{});
+    }
+  }
+
+  // Возврат из фона/разблокировка — оживляем звук
+  document.addEventListener('visibilitychange', ()=>{
+    if (document.visibilityState === 'visible') kickAudioPipeline();
+  });
+  window.addEventListener('focus', kickAudioPipeline);
+  window.addEventListener('pageshow', kickAudioPipeline);
+
+  // ====== PWA установка ======
+  window.addEventListener('beforeinstallprompt', (e)=>{
+    e.preventDefault();
+    S.beforeInstallEvt = e;
+    ui.btnInstall.hidden = false;
+  });
+  ui.btnInstall.onclick = async ()=>{
+    if(!S.beforeInstallEvt) return;
+    ui.btnInstall.disabled = true;
+    await S.beforeInstallEvt.prompt();
+    S.beforeInstallEvt = null;
+    setTimeout(()=>{ ui.btnInstall.hidden = true; ui.btnInstall.disabled = false; }, 500);
+  };
+
+  // ====== Service Worker ======
   if('serviceWorker' in navigator){
     window.addEventListener('load', ()=>{
-      navigator.serviceWorker.register('./sw.js').catch(()=>{});
+      navigator.serviceWorker.register('./sw.js')
+        .then(()=>console.log('SW registered'))
+        .catch((e)=>console.warn('SW failed', e));
+    });
+    // если SW обновился — перезагрузим страницу после простого диалога
+    navigator.serviceWorker.addEventListener('message', (ev)=>{
+      if (ev.data && ev.data.type === 'NEW_VERSION') {
+        const ok = confirm('Доступно обновление. Перезапустить приложение сейчас?');
+        if (ok) location.reload();
+      }
     });
   }
 
+  // ----- Init
   setStatus('ok','Готово к началу');
 })();
 </script>
