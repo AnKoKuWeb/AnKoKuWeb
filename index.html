@@ -14,17 +14,21 @@
       --warn:#f59e0b; --danger:#ef4444; --ok:#34d399; --line:rgba(255,255,255,.08);
     }
     *{box-sizing:border-box}
-    html,body{height:100%}
+    html,body{height:100%;}
     body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,"Noto Sans";}
-    .wrap{max-width:1440px;margin:0 auto;padding:24px;height:100%;display:flex;flex-direction:column;position:relative;}
-    .card{background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.02));border:1px solid var(--line);border-radius:20px;padding:18px;box-shadow:0 12px 30px rgba(0,0,0,.25);height:100%;display:flex;flex-direction:column;position:relative;z-index:10;}
+    .wrap{
+      max-width:980px;margin:0 auto;padding:24px;
+      display: flex; flex-direction: column; height: 100%;
+    }
+    .card{
+      background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.02));border:1px solid var(--line);border-radius:20px;padding:18px;box-shadow:0 12px 30px rgba(0,0,0,.25);
+      flex: 1; display: flex; flex-direction: column;
+    }
     h1{font-size:26px;margin:0 0 8px}
     p.lead{margin:0 0 10px;color:var(--muted)}
-    .grid{display:grid;gap:14px;grid-template-columns:repeat(12,1fr);flex-grow:1;}
-    .col-4{grid-column:span 4;display:flex;flex-direction:column;gap:14px;}
-    .col-6{grid-column:span 6} .col-8{grid-column:span 8;display:flex;flex-direction:column;}
-    .col-12{grid-column:span 12}
-    @media (max-width:1024px){.grid{flex-direction:column;}.col-4,.col-8{grid-column:span 12;}}
+    .grid{display:grid;gap:14px;grid-template-columns:repeat(12,1fr)}
+    .col-4{grid-column:span 4} .col-6{grid-column:span 6} .col-8{grid-column:span 8} .col-12{grid-column:span 12}
+    @media (max-width:860px){.col-4,.col-6,.col-8{grid-column:span 12}}
     .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--line);background:#0f172a;color:var(--ink);
          padding:14px 16px;border-radius:14px;font-weight:700;cursor:pointer;min-height:48px;font-size:16px}
     .btn:hover{border-color:rgba(255,255,255,.25)}
@@ -32,7 +36,7 @@
     .btn.ghost{background:transparent}
     .btn.danger{background:var(--danger);border-color:transparent}
     .btn:disabled{opacity:.55;cursor:not-allowed}
-    .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;}
+    .row{display:flex;flex-wrap:wrap;gap:10px}
     .badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid var(--line)}
     .note{font-size:13px;color:var(--muted)}
     .sep{height:1px;background:var(--line);margin:14px 0}
@@ -53,44 +57,44 @@
     video{max-width:100%;width:100%;background:#000;border-radius:12px}
     audio{display:block}
     
-    /* Дополнительные стили для полноэкранного видео и управления */
-    .screen-video-container {
-      position: fixed;
-      left: 0;
-      top: 0;
-      width: 100%;
-      height: 100%;
+    .main-content {
+      flex: 1;
       display: flex;
-      justify-content: center;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    
+    .video-container {
+      flex: 1;
+      position: relative;
+      background-color: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-top: 14px;
+      display: flex;
       align-items: center;
-      background-color: #0b1220;
-      z-index: 1; /* Поверх основного контента, но ниже панели управления */
+      justify-content: center;
     }
-    .screen-video-container video {
+    
+    #remoteScreen {
       width: 100%;
       height: 100%;
-      object-fit: contain; /* Чтобы видео всегда было видно целиком */
-      border-radius: 0;
-      z-index: 2;
+      object-fit: contain; /* Сохраняет пропорции и помещает видео целиком */
+      display: block;
     }
-    .video-controls {
-      position: fixed;
-      bottom: 24px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      gap: 10px;
-      background-color: rgba(15, 23, 42, 0.7);
-      border-radius: 14px;
-      padding: 10px 20px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      z-index: 100;
+
+    #localScreen {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      width: 240px;
+      height: 135px;
+      border-radius: 8px;
+      border: 2px solid rgba(255,255,255,.2);
+      z-index: 10;
+      object-fit: cover;
     }
-    .video-controls .badge {
-      background: none;
-      border: none;
-      font-size: 14px;
-    }
+
   </style>
 </head>
 <body>
@@ -109,72 +113,88 @@
 
     <div class="sep"></div>
 
-    <div class="grid">
-      <div class="col-12">
-        <h3>Шаг 1 — Роль</h3>
-        <div class="row">
-          <button class="btn" id="btnCaller">Я звоню</button>
-          <button class="btn" id="btnCallee">Мне звонят</button>
-        </div>
-        <label class="note"><input type="checkbox" id="ckStun" checked> Использовать STUN (рекомендуется)</label>
-        <label class="note"><input type="checkbox" id="ckMom"> Режим «для мамы» (крупнее шрифты)</label>
-
-        <div class="sep"></div>
-        <h3>Шаг 2 — Управление</h3>
-        <div class="row">
-          <button class="btn primary" id="btnMic">Разрешить микрофон</button>
-          <button class="btn" id="btnToggleMic" disabled>
-            <span id="micToggleIcon">🎙️</span><span id="micToggleText">Выключить микрофон</span>
-          </button>
-          <button class="btn" id="btnShareScreen">Поделиться экраном</button>
-          <button class="btn danger" id="btnStopShare" disabled>Стоп</button>
-        </div>
-        <div class="meters">
-          <div class="bar"><i id="lvLocal"></i></div>
-          <div class="bar"><i id="lvRemote"></i></div>
-        </div>
-        <span class="float-tip">Левая полоса — вы, правая — собеседник.</span>
-      </div>
-
-      <div class="col-12">
-        <div class="sep"></div>
-        <h3>Шаг 3 — Обмен кодами (один раз)</h3>
-        <div class="grid">
-          <div class="col-12">
-            <label class="note">Ваш код (передайте собеседнику):</label>
-            <textarea id="myCode" readonly placeholder="Нажмите «Сформировать код»…"></textarea>
-            <div class="row">
-              <button class="btn primary" id="btnMake">Сформировать код</button>
-              <button class="btn" id="btnCopy" disabled>Копировать</button>
-              <button class="btn ghost" id="btnShare" disabled>Поделиться…</button>
-            </div>
+    <div class="main-content">
+      <div class="grid">
+        <div class="col-4">
+          <h3>Шаг 1 — Роль</h3>
+          <div class="row">
+            <button class="btn" id="btnCaller">Я звоню</button>
+            <button class="btn" id="btnCallee">Мне звонят</button>
           </div>
-          <div class="col-12">
-            <label class="note">Код собеседника:</label>
-            <textarea id="peerCode" placeholder="Вставьте сюда код"></textarea>
-            <div class="row">
-              <button class="btn" id="btnAccept">Подтвердить код</button>
-              <button class="btn ghost" id="btnPaste">Вставить из буфера</button>
-            </div>
+          <label class="note"><input type="checkbox" id="ckStun" checked> Использовать STUN (рекомендуется)</label>
+          <label class="note"><input type="checkbox" id="ckMom"> Режим «для мамы» (крупнее шрифты)</label>
+
+          <div class="sep"></div>
+          <h3>Шаг 2 — Микрофон</h3>
+          <div class="row">
+            <button class="btn primary" id="btnMic">Разрешить микрофон</button>
+            <button class="btn" id="btnMuteMic" disabled>Выключить</button>
+            <span class="badge" id="micBadge">Микрофон: неактивен</span>
+          </div>
+          <div class="meters">
+            <div class="bar"><i id="lvLocal"></i></div>
+            <div class="bar"><i id="lvRemote"></i></div>
+          </div>
+          <span class="float-tip">Левая полоса — вы, правая — собеседник.</span>
+
+          <div class="sep"></div>
+          <h3>Шаг 3 — Экран</h3>
+          <div class="row">
+            <button class="btn" id="btnShareScreen">Поделиться экраном</button>
+            <button class="btn danger" id="btnStopShare" disabled>Стоп</button>
           </div>
         </div>
+
+        <div class="col-8">
+          <h3>Шаг 4 — Обмен кодами (один раз)</h3>
+          <div class="grid">
+            <div class="col-12">
+              <label class="note">Ваш код (передайте собеседнику):</label>
+              <textarea id="myCode" readonly placeholder="Нажмите «Сформировать код»…"></textarea>
+              <div class="row">
+                <button class="btn primary" id="btnMake">Сформировать код</button>
+                <button class="btn" id="btnCopy" disabled>Копировать</button>
+                <button class="btn ghost" id="btnShare" disabled>Поделиться…</button>
+              </div>
+            </div>
+            <div class="col-12">
+              <label class="note">Код собеседника:</label>
+              <textarea id="peerCode" placeholder="Вставьте сюда код"></textarea>
+              <div class="row">
+                <button class="btn" id="btnAccept">Подтвердить код</button>
+                <button class="btn ghost" id="btnPaste">Вставить из буфера</button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
+      
+      <div class="video-container">
+        <video id="remoteScreen" autoplay playsinline></video>
+        <video id="localScreen" autoplay playsinline muted hidden></video>
+      </div>
+
+      <div class="row" style="margin-top:8px">
+        <audio id="remoteAudio" autoplay playsinline></audio>
+        <button class="btn danger" id="btnHang" disabled>Завершить звонок</button>
+        <span class="badge" id="statRtt">RTT: —</span>
+        <span class="badge" id="statBit">Битрейт: —</span>
+        <span class="badge" id="statJit">Джиттер: —</span>
+      </div>
+
+      <div class="sep"></div>
+      <details>
+        <summary>Что важно знать</summary>
+        <ul class="note">
+          <li>Код одноразовый и действует только для текущего вызова.</li>
+          <li>Если связь не установилась, попробуйте Wi-Fi/другую сеть. Для «железобетона» нужен TURN.</li>
+          <li><b>Android</b>: установите как PWA и отключите энергосбережение для приложения, если система его «усыпляет».</li>
+        </ul>
+      </details>
     </div>
   </div>
-
-  <div class="screen-video-container" hidden>
-    <video id="remoteScreen" autoplay playsinline></video>
-    <video id="localScreen" autoplay playsinline muted></video>
-    <div class="video-controls">
-      <audio id="remoteAudio" autoplay playsinline></audio>
-      <button class="btn danger" id="btnHang" disabled>Завершить звонок</button>
-      <span class="badge" id="statRtt">RTT: —</span>
-      <span class="badge" id="statBit">Битрейт: —</span>
-      <span class="badge" id="statJit">Джиттер: —</span>
-    </div>
-  </div>
-
 </div>
+
 <script>
 (() => {
   const $ = (id)=>document.getElementById(id);
@@ -183,7 +203,7 @@
     netHint: $('netHint'), roleHint: $('roleHint'), callHint: $('callHint'),
     btnCaller: $('btnCaller'), btnCallee: $('btnCallee'),
     ckStun: $('ckStun'), ckMom: $('ckMom'),
-    btnMic: $('btnMic'), micBadge: $('micBadge'), btnToggleMic: $('btnToggleMic'), micToggleIcon: $('micToggleIcon'), micToggleText: $('micToggleText'),
+    btnMic: $('btnMic'), micBadge: $('micBadge'), btnMuteMic: $('btnMuteMic'),
     lvLocal: $('lvLocal'), lvRemote: $('lvRemote'),
     myCode: $('myCode'), peerCode: $('peerCode'),
     btnMake: $('btnMake'), btnCopy: $('btnCopy'), btnShare: $('btnShare'),
@@ -192,8 +212,7 @@
     statRtt: $('statRtt'), statBit: $('statBit'), statJit: $('statJit'),
     btnInstall: $('btnInstall'),
     btnShareScreen: $('btnShareScreen'), btnStopShare: $('btnStopShare'),
-    localScreen: $('localScreen'), remoteScreen: $('remoteScreen'),
-    screenVideoContainer: document.querySelector('.screen-video-container')
+    localScreen: $('localScreen'), remoteScreen: $('remoteScreen')
   };
 
   const S = {
@@ -210,7 +229,8 @@
     beforeInstallEvt: null,
     keepAliveTimer: null,
     screenStream: null,
-    dc: null
+    dc: null,
+    micMuted: false
   };
 
   // ----- UI helpers
@@ -240,9 +260,9 @@
     try{
       const s = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}, video:false});
       S.mic = s;
-      ui.btnMic.style.display = 'none'; // Скрываем кнопку "Разрешить микрофон"
       ui.micBadge.textContent = 'Микрофон: активен'; ui.micBadge.style.color = '#b7f7cf';
-      ui.btnToggleMic.disabled = false;
+      ui.btnMic.disabled = true;
+      ui.btnMuteMic.disabled = false;
       setupLocalLevelMeter(s);
       kickAudioPipeline();
     }catch(e){
@@ -251,23 +271,16 @@
   }
   ui.btnMic.onclick = ensureMic;
   
-  // Добавляем логику включения/выключения микрофона
-  ui.btnToggleMic.onclick = () => {
-    if (!S.mic) return;
-    const audioTrack = S.mic.getAudioTracks()[0];
-    if (audioTrack) {
-      audioTrack.enabled = !audioTrack.enabled;
-      if (audioTrack.enabled) {
-        ui.micToggleIcon.textContent = '🎙️';
-        ui.micToggleText.textContent = 'Выключить микрофон';
-        ui.micBadge.textContent = 'Микрофон: активен';
-      } else {
-        ui.micToggleIcon.textContent = '🔇';
-        ui.micToggleText.textContent = 'Включить микрофон';
-        ui.micBadge.textContent = 'Микрофон: выключен';
-      }
+  ui.btnMuteMic.onclick = () => {
+    S.micMuted = !S.micMuted;
+    const track = S.mic.getAudioTracks()[0];
+    if (track) {
+      track.enabled = !S.micMuted;
     }
+    ui.btnMuteMic.textContent = S.micMuted ? 'Включить' : 'Выключить';
+    ui.btnMuteMic.classList.toggle('primary', S.micMuted);
   };
+
 
   // ----- ICE servers
   function iceServers(){
@@ -292,10 +305,6 @@
     pc.ontrack = (ev)=>{
       if (ev.track.kind === 'video') {
         ui.remoteScreen.srcObject = ev.streams[0];
-        ui.screenVideoContainer.hidden = false;
-        // Переключение видеопотоков
-        ui.remoteScreen.hidden = false;
-        ui.localScreen.hidden = true;
       }
       if (ev.track.kind === 'audio') {
         ui.remoteAudio.srcObject = ev.streams[0];
@@ -442,7 +451,6 @@
       setStatus('warn','Звонок завершён');
       ui.btnHang.disabled=true; ui.callHint.textContent='Звонок: нет';
       if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'none';
-      ui.screenVideoContainer.hidden = true;
     }catch{}
   };
 
@@ -507,14 +515,12 @@
 
   // ====== ДЕМОНСТРАЦИЯ ЭКРАНА (гибрид Electron + Browser)
   async function startScreenShare() {
-    if (!S.pc) { alert('Сначала создайте соединение'); return; }
-    if (S.screenStream) { alert('Демонстрация уже запущена'); return; }
+    if (S.screenStream) return;
     
-    ui.btnShareScreen.disabled = true;
-
     try {
       let stream;
       if (window.electronShare?.pickScreenWithAudio) {
+        // Electron: получаем ID источника и создаём поток в renderer process
         const sourceId = await window.electronShare.pickScreenWithAudio();
         stream = await navigator.mediaDevices.getUserMedia({
           audio: {
@@ -535,22 +541,29 @@
           }
         });
       } else {
+        // Обычный браузер
         stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
       }
 
+      // Дальнейшая обработка потока
       S.screenStream = stream;
       ui.localScreen.srcObject = stream;
-      ui.screenVideoContainer.hidden = false;
-      ui.remoteScreen.hidden = true;
       ui.localScreen.hidden = false;
-      
       ui.btnStopShare.disabled = false;
-      
-      stream.getTracks().forEach(t => S.pc && S.pc.addTrack(t, stream));
-      renegotiate();
+      ui.btnShareScreen.disabled = true;
+
+      // Удаляем старые видео-треки и добавляем новые
+      if (S.pc) {
+        S.pc.getSenders().forEach(sender => {
+          if (sender.track && sender.track.kind === 'video') {
+            S.pc.removeTrack(sender);
+          }
+        });
+        stream.getTracks().forEach(t => S.pc.addTrack(t, stream));
+        renegotiate();
+      }
 
       stream.getTracks().forEach(t => t.onended = stopScreenShare);
-
     } catch (e) {
       alert('Экран: ' + e.message);
       ui.btnShareScreen.disabled = false;
@@ -559,22 +572,20 @@
 
   function stopScreenShare(){
     if(!S.screenStream) return;
-    try{ S.screenStream.getTracks().forEach(t=>t.stop()); }catch{}
-    S.screenStream = null;
-    ui.localScreen.srcObject = null; 
-    ui.localScreen.hidden = true;
-    ui.btnStopShare.disabled = true;
-    ui.btnShareScreen.disabled = false;
-    // Скрываем контейнер, если видеопоток удаленного пользователя также отсутствует
-    if (!ui.remoteScreen.srcObject) {
-      ui.screenVideoContainer.hidden = true;
-    }
-    // Отключаем видео, которое мы передавали, чтобы не отображалась заглушка
-    const screenSender = S.pc.getSenders().find(sender => sender.track.kind === 'video' && sender.track !== S.mic.getAudioTracks()[0]);
-    if (screenSender) {
-        S.pc.removeTrack(screenSender);
+    try{ 
+      S.screenStream.getTracks().forEach(t=>t.stop()); 
+      // Удаляем треки с PeerConnection
+      if(S.pc){
+        S.pc.getSenders().forEach(sender => {
+          if (sender.track && sender.track.kind === 'video' && sender.track.readyState !== 'ended') {
+            S.pc.removeTrack(sender);
+          }
+        });
         renegotiate();
-    }
+      }
+    }catch{}
+    S.screenStream = null;
+    ui.localScreen.srcObject = null; ui.localScreen.hidden = true; ui.btnStopShare.disabled = true; ui.btnShareScreen.disabled = false;
   }
 
   ui.btnShareScreen.onclick = startScreenShare;
@@ -582,11 +593,15 @@
 
   async function renegotiate(){
     if(!S.pc || !S.dc) return;
-    const offer = await S.pc.createOffer();
-    await S.pc.setLocalDescription(offer);
-    await waitIceComplete(S.pc);
-    const payload = {type:'offer', sdp:S.pc.localDescription.toJSON(), ice:S.gathered};
-    S.dc.send(JSON.stringify(payload));
+    try {
+      const offer = await S.pc.createOffer();
+      await S.pc.setLocalDescription(offer);
+      await waitIceComplete(S.pc);
+      const payload = {type:'offer', sdp:S.pc.localDescription.toJSON(), ice:S.gathered};
+      S.dc.send(JSON.stringify(payload));
+    } catch(e) {
+      console.error('Renegotiation failed:', e);
+    }
   }
   async function handleSignal(msg){
     const data = JSON.parse(msg);
