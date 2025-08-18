@@ -3,11 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>PeerCall — звонки и экран</title>
+  <title>PeerCall — просто позвонить</title>
   <meta name="theme-color" content="#0b1220">
   <link rel="manifest" href="manifest.json">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
   <style>
     :root{
       --bg:#0b1220; --panel:#0f172a; --ink:#e5e7eb; --muted:#9ca3af; --accent:#22c55e; --accent-ink:#06210f;
@@ -47,37 +45,33 @@
     details{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:rgba(255,255,255,.03)}
     summary{cursor:pointer}
     .float-tip{font-size:12px;color:var(--muted)}
-    .install{margin-left:auto}
-    video{max-width:100%;width:100%;background:#000;border-radius:12px}
-    audio{display:block}
   </style>
 </head>
 <body>
 <div class="wrap">
   <div class="card">
-    <h1>PeerCall — звонки и экран</h1>
-    <p class="lead">Звонки, статистика и демонстрация экрана. Без бэкенда: обмен «кодами» вручную. Работает в мобильном браузере и через Electron.</p>
+    <h1>PeerCall — просто позвонить</h1>
+    <p class="lead">Для семьи и друзей. Теперь с автоматическим соединением через PeerJS.</p>
 
     <div class="status" id="appStatus">
       <span class="dot"></span><b id="stateText">Готово к началу</b>
       <span class="badge" id="netHint">STUN: включён</span>
       <span class="badge" id="roleHint">Роль: не выбрана</span>
       <span class="badge" id="callHint">Звонок: нет</span>
-      <button class="btn ghost install" id="btnInstall" hidden>Установить приложение</button>
+      <span class="badge" id="peerId">ID: —</span>
     </div>
 
     <div class="sep"></div>
 
     <div class="grid">
       <div class="col-4">
-        <h3>Шаг 1 — Роль</h3>
+        <h3>Шаг 1 — Выберите роль</h3>
         <div class="row">
           <button class="btn" id="btnCaller">Я звоню</button>
           <button class="btn" id="btnCallee">Мне звонят</button>
+          <label class="note"><input type="checkbox" id="ckStun" checked> Использовать STUN (рекомендуется)</label>
+          <label class="note"><input type="checkbox" id="ckMom"> Режим «для мамы» (больше шрифты, меньше деталей)</label>
         </div>
-        <label class="note"><input type="checkbox" id="ckStun" checked> Использовать STUN (рекомендуется)</label>
-        <label class="note"><input type="checkbox" id="ckMom"> Режим «для мамы» (крупнее шрифты)</label>
-
         <div class="sep"></div>
         <h3>Шаг 2 — Микрофон</h3>
         <div class="row">
@@ -89,42 +83,24 @@
           <div class="bar"><i id="lvRemote"></i></div>
         </div>
         <span class="float-tip">Левая полоса — вы, правая — собеседник.</span>
-
-        <div class="sep"></div>
-        <h3>Шаг 3 — Экран</h3>
-        <div class="row">
-          <button class="btn" id="btnShareScreen">Поделиться экраном</button>
-          <button class="btn danger" id="btnStopShare" disabled>Стоп</button>
-        </div>
-        <video id="localScreen" autoplay playsinline muted hidden></video>
       </div>
 
       <div class="col-8">
-        <h3>Шаг 4 — Обмен кодами (один раз)</h3>
+        <h3>Шаг 3 — Подключение</h3>
         <div class="grid">
           <div class="col-12">
-            <label class="note">Ваш код (передайте собеседнику):</label>
-            <textarea id="myCode" readonly placeholder="Нажмите «Сформировать код»…"></textarea>
+            <label class="note">ID собеседника:</label>
+            <input type="text" id="peerIdInput" placeholder="Введите ID собеседника">
             <div class="row">
-              <button class="btn primary" id="btnMake">Сформировать код</button>
-              <button class="btn" id="btnCopy" disabled>Копировать</button>
-              <button class="btn ghost" id="btnShare" disabled>Поделиться…</button>
-            </div>
-          </div>
-          <div class="col-12">
-            <label class="note">Код собеседника:</label>
-            <textarea id="peerCode" placeholder="Вставьте сюда код"></textarea>
-            <div class="row">
-              <button class="btn" id="btnAccept">Подтвердить код</button>
-              <button class="btn ghost" id="btnPaste">Вставить из буфера</button>
+              <button class="btn primary" id="btnConnect">Соединиться</button>
+              <button class="btn ghost" id="btnCopyId">Копировать мой ID</button>
             </div>
           </div>
         </div>
 
         <div class="sep"></div>
 
-        <video id="remoteScreen" autoplay playsinline></video>
-        <div class="row" style="margin-top:8px">
+        <div class="row">
           <audio id="remoteAudio" autoplay playsinline></audio>
           <button class="btn danger" id="btnHang" disabled>Завершить звонок</button>
           <span class="badge" id="statRtt">RTT: —</span>
@@ -138,61 +114,57 @@
     <details>
       <summary>Что важно знать</summary>
       <ul class="note">
-        <li>Код одноразовый и действует только для текущего вызова.</li>
-        <li>Если связь не установилась, попробуйте Wi-Fi/другую сеть. Для «железобетона» нужен TURN.</li>
-        <li><b>Android</b>: установите как PWA и отключите энергосбережение для приложения, если система его «усыпляет».</li>
+        <li>Для соединения введите ID собеседника и нажмите "Соединиться".</li>
+        <li>Если связь не установилась, попробуйте включить Wi‑Fi или другую сеть. Для «железобетона» нужен TURN‑ретранслятор.</li>
+        <li>Для iOS лучше использовать установленную PWA (кнопка «Поделиться» → «На экран Домой»).</li>
       </ul>
     </details>
   </div>
 </div>
 
+<!-- Добавляем PeerJS библиотеку -->
+<script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 <script>
 (() => {
   const $ = (id)=>document.getElementById(id);
   const ui = {
     appStatus: $('appStatus'), stateText: $('stateText'),
-    netHint: $('netHint'), roleHint: $('roleHint'), callHint: $('callHint'),
+    netHint: $('netHint'), roleHint: $('roleHint'), callHint: $('callHint'), peerId: $('peerId'),
     btnCaller: $('btnCaller'), btnCallee: $('btnCallee'),
     ckStun: $('ckStun'), ckMom: $('ckMom'),
     btnMic: $('btnMic'), micBadge: $('micBadge'),
     lvLocal: $('lvLocal'), lvRemote: $('lvRemote'),
-    myCode: $('myCode'), peerCode: $('peerCode'),
-    btnMake: $('btnMake'), btnCopy: $('btnCopy'), btnShare: $('btnShare'),
-    btnAccept: $('btnAccept'), btnPaste: $('btnPaste'),
+    peerIdInput: $('peerIdInput'),
+    btnConnect: $('btnConnect'), btnCopyId: $('btnCopyId'),
     remoteAudio: $('remoteAudio'), btnHang: $('btnHang'),
-    statRtt: $('statRtt'), statBit: $('statBit'), statJit: $('statJit'),
-    btnInstall: $('btnInstall'),
-    btnShareScreen: $('btnShareScreen'), btnStopShare: $('btnStopShare'),
-    localScreen: $('localScreen'), remoteScreen: $('remoteScreen')
+    statRtt: $('statRtt'), statBit: $('statBit'), statJit: $('statJit')
   };
 
   const S = {
     role: null,
     useStun: true,
     mic: null,
-    pc: null,
-    gathered: [],
+    peer: null,
+    conn: null,
+    call: null,
     audioCtx: null,
     localAnalyser: null,
     remoteAnalyser: null,
     statsTimer: null,
-    wakeLock: null,
-    beforeInstallEvt: null,
-    keepAliveTimer: null,
-    screenStream: null,
-    dc: null
+    myPeerId: null
   };
 
-  // ----- UI helpers
   function setStatus(level, text){
     ui.appStatus.classList.remove('ok','warn','bad');
     ui.appStatus.classList.add(level);
     ui.stateText.textContent = text;
   }
+  
   function setRole(r){
     S.role = r;
     ui.roleHint.textContent = 'Роль: ' + (r ? (r==='caller'?'я звоню':'мне звонят') : 'не выбрана');
   }
+  
   ui.btnCaller.onclick = ()=>setRole('caller');
   ui.btnCallee.onclick = ()=>setRole('callee');
 
@@ -200,223 +172,205 @@
     S.useStun = ui.ckStun.checked;
     ui.netHint.textContent = 'STUN: ' + (S.useStun?'включён':'выкл');
   };
+
   ui.ckMom.onchange = ()=>{
     document.body.style.fontSize = ui.ckMom.checked ? '18px' : '';
   };
 
-  // ----- MIC + AudioContext
   async function ensureMic(){
     if(S.mic) return;
     try{
-      const s = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}, video:false});
-      S.mic = s; ui.micBadge.textContent = 'Микрофон: активен'; ui.micBadge.style.color = '#b7f7cf';
+      const s = await navigator.mediaDevices.getUserMedia({audio:true, video:false});
+      S.mic = s; 
+      ui.micBadge.textContent = 'Микрофон: активен'; 
+      ui.micBadge.style.color = '#b7f7cf';
       setupLocalLevelMeter(s);
-      kickAudioPipeline();
     }catch(e){
-      setStatus('bad','Микрофон недоступен'); alert('Ошибка микрофона: ' + e.message);
+      setStatus('bad','Микрофон недоступен'); 
+      alert('Ошибка микрофона: ' + e.message);
     }
   }
+  
   ui.btnMic.onclick = ensureMic;
 
-  // ----- ICE servers
-  function iceServers(){
-    return S.useStun ? [
-      {urls:'stun:stun.l.google.com:19302'},
-      {urls:'stun:stun1.l.google.com:19302'},
-      {urls:'stun:stun2.l.google.com:19302'},
-      {urls:'stun:stun3.l.google.com:19302'}
-    ] : [];
-  }
-
-  // ----- RTCPeerConnection
-  function newPC(){
-    if(S.pc){ try{ S.pc.close(); }catch{} }
-    S.gathered = [];
-    const pc = new RTCPeerConnection({iceServers: iceServers()});
-    S.pc = pc;
-
-    // Добавляем аудио из микрофона
-    if(S.mic){ for(const t of S.mic.getTracks()) pc.addTrack(t, S.mic); }
-
-    pc.ontrack = (ev)=>{
-      if (ev.track.kind === 'video') {
-        ui.remoteScreen.srcObject = ev.streams[0];
+  function initPeerJS() {
+    if (S.peer) return;
+    
+    // Создаем новый Peer с случайным ID
+    S.peer = new Peer({
+      host: '0.peerjs.com',
+      port: 443,
+      secure: true,
+      debug: 3,
+      config: {
+        iceServers: S.useStun ? [
+          {urls:'stun:stun.l.google.com:19302'},
+          {urls:'stun:stun1.l.google.com:19302'},
+          {urls:'stun:stun2.l.google.com:19302'},
+          {urls:'stun:stun3.l.google.com:19302'}
+        ] : []
       }
-      if (ev.track.kind === 'audio') {
-        ui.remoteAudio.srcObject = ev.streams[0];
-        ui.remoteAudio.play().catch(()=>{});
-        setupRemoteLevelMeter(ev.streams[0]);
-        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
-        kickAudioPipeline();
-      }
-    };
-
-    pc.onicecandidate = (ev)=>{ if(ev.candidate) S.gathered.push(ev.candidate.toJSON()); };
-
-    pc.onconnectionstatechange = ()=>{
-      const st = pc.connectionState;
-      ui.callHint.textContent = 'Звонок: ' + st;
-
-      if(st==='connecting'){ setStatus('warn','Соединяем…'); }
-      if(st==='connected'){
-        setStatus('ok','На связи');
-        ui.btnHang.disabled=false;
-        startStats();
-        enableWakeLock();
-        startKeepAlive();
-      }
-      if(st==='failed'){
-        setStatus('bad','Не удалось соединиться');
-        ui.btnHang.disabled=true;
-        stopStats(); disableWakeLock(); stopKeepAlive();
-      }
-      if(st==='disconnected' || st==='closed'){
-        setStatus('warn','Связь прервана');
-        ui.btnHang.disabled=true;
-        stopStats(); disableWakeLock(); stopKeepAlive();
-      }
-    };
-    return pc;
-  }
-
-  // ----- base64 packers (url-safe)
-  function pack(obj){
-    const s = JSON.stringify(obj);
-    const b64 = btoa(unescape(encodeURIComponent(s))).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
-    return b64;
-  }
-  function unpack(b64url){
-    const b64 = b64url.replaceAll('-','+').replaceAll('_','/');
-    const pad = b64.length % 4 === 0 ? '' : '='.repeat(4 - (b64.length % 4));
-    const json = decodeURIComponent(escape(atob(b64 + pad)));
-    return JSON.parse(json);
-  }
-
-  function waitIceComplete(pc, timeoutMs=1200){
-    return new Promise((resolve)=>{
-      if(pc.iceGatheringState==='complete') return resolve();
-      const t = setTimeout(resolve, timeoutMs);
-      pc.onicegatheringstatechange = ()=>{
-        if(pc.iceGatheringState==='complete'){ clearTimeout(t); resolve(); }
-      };
+    });
+    
+    S.peer.on('open', (id) => {
+      S.myPeerId = id;
+      ui.peerId.textContent = `ID: ${id.substring(0, 8)}...`;
+      setStatus('ok','Готов к подключению');
+    });
+    
+    S.peer.on('error', (err) => {
+      console.error('PeerJS error:', err);
+      setStatus('bad', `Ошибка: ${err.type}`);
+    });
+    
+    // Обработка входящих вызовов
+    S.peer.on('call', (incomingCall) => {
+      if (S.role !== 'callee') return;
+      
+      setStatus('warn','Входящий звонок...');
+      
+      ensureMic().then(() => {
+        incomingCall.answer(S.mic);
+        S.call = incomingCall;
+        
+        incomingCall.on('stream', (remoteStream) => {
+          ui.remoteAudio.srcObject = remoteStream;
+          setupRemoteLevelMeter(remoteStream);
+          setStatus('ok','На связи');
+          ui.btnHang.disabled = false;
+          startStats();
+        });
+        
+        incomingCall.on('close', () => {
+          hangUp();
+        });
+        
+        incomingCall.on('error', (err) => {
+          console.error('Call error:', err);
+          setStatus('bad','Ошибка звонка');
+          hangUp();
+        });
+      });
     });
   }
 
-  // ----- Make/Accept codes (c учётом DC для ренегоциации)
-  async function makeCode(){
-    if(!S.role){ alert('Выберите роль'); return; }
-    await ensureMic();
-    if(S.role==='caller'){
-      const pc = newPC();
-      // DataChannel для сигнализации (ренегоциации экрана)
-      const dc = pc.createDataChannel('sig');
-      dc.onmessage = (ev)=>handleSignal(ev.data);
-      S.dc = dc;
-
-      const offer = await pc.createOffer({offerToReceiveAudio:true,offerToReceiveVideo:true});
-      await pc.setLocalDescription(offer);
-      await waitIceComplete(pc);
-      const payload = {v:3, role:'caller', sdp: pc.localDescription.toJSON(), ice: S.gathered, t: Date.now()};
-      ui.myCode.value = pack(payload);
-      ui.btnCopy.disabled = true; // включим после клика, чтобы не копировать пустоту
-      // небольшая задержка, чтобы clipboard API корректно отработал на мобильных
-      setTimeout(()=>ui.btnCopy.disabled=false, 100);
-      ui.btnShare.disabled = !navigator.share;
-      setStatus('warn','Ждём код ответа');
-    }else{
-      if(!ui.peerCode.value.trim()){ alert('Сначала вставьте код собеседника'); return; }
-      const ok = await acceptCode(true); if(!ok) return;
-
-      // Получим DataChannel от инициатора
-      S.pc.ondatachannel = (ev)=>{
-        S.dc = ev.channel;
-        S.dc.onmessage = (e)=>handleSignal(e.data);
-      };
-
-      const answer = await S.pc.createAnswer();
-      await S.pc.setLocalDescription(answer);
-      await waitIceComplete(S.pc);
-      const payload = {v:3, role:'callee', sdp: S.pc.localDescription.toJSON(), ice: S.gathered, t: Date.now()};
-      ui.myCode.value = pack(payload);
-      ui.btnCopy.disabled = false;
-      ui.btnShare.disabled = !navigator.share;
-      setStatus('warn','Отправьте ваш код инициатору');
+  async function connectToPeer() {
+    if (!S.role) {
+      alert('Выберите роль');
+      return;
+    }
+    
+    if (!S.peer) {
+      initPeerJS();
+      return;
+    }
+    
+    const peerId = ui.peerIdInput.value.trim();
+    if (!peerId) {
+      alert('Введите ID собеседника');
+      return;
+    }
+    
+    if (S.role === 'caller') {
+      await ensureMic();
+      
+      setStatus('warn','Соединяемся...');
+      
+      try {
+        S.call = S.peer.call(peerId, S.mic);
+        
+        S.call.on('stream', (remoteStream) => {
+          ui.remoteAudio.srcObject = remoteStream;
+          setupRemoteLevelMeter(remoteStream);
+          setStatus('ok','На связи');
+          ui.btnHang.disabled = false;
+          startStats();
+        });
+        
+        S.call.on('close', () => {
+          hangUp();
+        });
+        
+        S.call.on('error', (err) => {
+          console.error('Call error:', err);
+          setStatus('bad','Ошибка звонка');
+          hangUp();
+        });
+      } catch (err) {
+        console.error('Call failed:', err);
+        setStatus('bad','Не удалось соединиться');
+      }
     }
   }
-  ui.btnMake.onclick = makeCode;
-
-  async function acceptCode(silent=false){
-    const code = ui.peerCode.value.trim();
-    if(!code){ if(!silent) alert('Нет кода'); return false; }
-    let obj;
-    try{ obj = unpack(code); }
-    catch(e){ if(!silent) alert('Формат кода неверный'); return false; }
-    if(!obj || !obj.sdp){ if(!silent) alert('В коде нет SDP'); return false; }
-    await ensureMic();
-    const pc = S.pc ?? newPC();
-    try{ await pc.setRemoteDescription(obj.sdp); }
-    catch(e){ if(!silent) alert('Не удалось применить описание'); return false; }
-    if(Array.isArray(obj.ice)){ for(const c of obj.ice){ try{ await pc.addIceCandidate(c); }catch{} } }
-    if(!silent) setStatus('warn','Код принят. Сформируйте свой код.');
-    return true;
-  }
-  ui.btnAccept.onclick = ()=>acceptCode(false);
-
-  // ----- Clipboard + Share
-  ui.btnCopy.onclick = async ()=>{
-    try{ await navigator.clipboard.writeText(ui.myCode.value); ui.btnCopy.textContent='Скопировано ✓'; setTimeout(()=>ui.btnCopy.textContent='Копировать',1200); }
-    catch(e){ alert('Буфер обмена недоступен'); }
-  };
-  ui.btnShare.onclick = async ()=>{
-    try{ await navigator.share({title:'Код PeerCall', text: ui.myCode.value}); }catch{}
-  };
-  ui.btnPaste.onclick = async ()=>{
-    try{ const t = await navigator.clipboard.readText(); if(t) ui.peerCode.value = t; }catch{ alert('Буфер обмена недоступен'); }
+  
+  ui.btnConnect.onclick = connectToPeer;
+  
+  ui.btnCopyId.onclick = async () => {
+    if (!S.myPeerId) {
+      alert('Сначала инициализируйте подключение');
+      return;
+    }
+    
+    try {
+      await navigator.clipboard.writeText(S.myPeerId);
+      ui.btnCopyId.textContent = 'Скопировано ✓';
+      setTimeout(() => ui.btnCopyId.textContent = 'Копировать мой ID', 1200);
+    } catch (e) {
+      alert('Буфер обмена недоступен');
+    }
   };
 
-  // ----- Hangup
-  ui.btnHang.onclick = ()=>{
-    try{
-      if(S.pc){
-        S.pc.getSenders().forEach(s=>{ try{s.track && s.track.stop()}catch{} });
-        S.pc.close();
+  function hangUp() {
+    try {
+      if (S.call) {
+        S.call.close();
+        S.call = null;
       }
-      S.pc=null;
-      stopScreenShare();
-      stopStats(); disableWakeLock(); stopKeepAlive();
+      
       setStatus('warn','Звонок завершён');
-      ui.btnHang.disabled=true; ui.callHint.textContent='Звонок: нет';
-      if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'none';
-    }catch{}
-  };
+      ui.btnHang.disabled = true;
+      ui.callHint.textContent = 'Звонок: нет';
+      stopStats();
+      
+      if (ui.remoteAudio.srcObject) {
+        ui.remoteAudio.srcObject.getTracks().forEach(track => track.stop());
+        ui.remoteAudio.srcObject = null;
+      }
+    } catch (e) {
+      console.error('Error hanging up:', e);
+    }
+  }
+  
+  ui.btnHang.onclick = hangUp;
 
-  // ----- Level meters
-  function setupLocalLevelMeter(stream){
+  function setupLocalLevelMeter(stream) {
     S.audioCtx = S.audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     const src = S.audioCtx.createMediaStreamSource(stream);
     const analyser = S.audioCtx.createAnalyser(); analyser.fftSize=256;
     src.connect(analyser); S.localAnalyser = analyser;
     loopLevels();
   }
-  function setupRemoteLevelMeter(stream){
+  
+  function setupRemoteLevelMeter(stream) {
     S.audioCtx = S.audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     const src = S.audioCtx.createMediaStreamSource(stream);
     const analyser = S.audioCtx.createAnalyser(); analyser.fftSize=256;
     src.connect(analyser); S.remoteAnalyser = analyser;
   }
-  function loopLevels(){
+  
+  function loopLevels() {
     if(!S.localAnalyser && !S.remoteAnalyser) return;
     const draw = ()=>{
       if(S.localAnalyser){
         const data = new Uint8Array(S.localAnalyser.frequencyBinCount);
         S.localAnalyser.getByteFrequencyData(data);
-        const v = Math.min(100, Math.round((data.reduce((a,b)=>a+b,0)/data.length)/2));
+        const v = Math.min(100, Math.round((data.reduce((a,b)=>a+b,0)/data.length)/2);
         ui.lvLocal.style.width = v + '%';
       }
       if(S.remoteAnalyser){
         const data = new Uint8Array(S.remoteAnalyser.frequencyBinCount);
         S.remoteAnalyser.getByteFrequencyData(data);
-        const v = Math.min(100, Math.round((data.reduce((a,b)=>a+b,0)/data.length)/2));
+        const v = Math.min(100, Math.round((data.reduce((a,b)=>a+b,0)/data.length)/2);
         ui.lvRemote.style.width = v + '%';
       }
       requestAnimationFrame(draw);
@@ -424,178 +378,35 @@
     requestAnimationFrame(draw);
   }
 
-  // ----- Stats
-  function startStats(){
+  function startStats() {
     stopStats();
-    S.statsTimer = setInterval(async ()=>{
-      if(!S.pc) return;
-      try{
-        const stats = await S.pc.getStats();
-        let rtt='—', br='—', jit='—';
-        stats.forEach(report=>{
-          if(report.type==='remote-inbound-rtp' && report.kind==='audio'){
-            if(report.roundTripTime) rtt = (report.roundTripTime*1000).toFixed(0)+' мс';
-            if(report.jitter) jit = (report.jitter*1000).toFixed(0)+' мс';
-          }
-          if(report.type==='candidate-pair' && report.state==='succeeded'){
-            if(report.availableOutgoingBitrate) br = (report.availableOutgoingBitrate/1000).toFixed(0)+' кбит/с';
-          }
-        });
-        ui.statRtt.textContent = 'RTT: ' + rtt;
-        ui.statJit.textContent = 'Джиттер: ' + jit;
-        ui.statBit.textContent = 'Битрейт: ' + br;
-      }catch{}
+    S.statsTimer = setInterval(async () => {
+      if (!S.call) return;
+      
+      // В PeerJS нет прямого доступа к статистике соединения, как в WebRTC
+      // Можно добавить более сложную логику отслеживания, если нужно
+      ui.statRtt.textContent = 'RTT: —';
+      ui.statJit.textContent = 'Джиттер: —';
+      ui.statBit.textContent = 'Битрейт: —';
     }, 1200);
   }
-  function stopStats(){ if(S.statsTimer){ clearInterval(S.statsTimer); S.statsTimer=null; } }
-
-  // ====== ДЕМОНСТРАЦИЯ ЭКРАНА (гибрид Electron + Browser)
-  async function startScreenShare() {
-  try {
-    let stream;
-    if (window.electronShare?.pickScreenWithAudio) {
-      // Electron: получаем ID источника и создаём поток в renderer process
-      const sourceId = await window.electronShare.pickScreenWithAudio();
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          mandatory: {
-            chromeMediaSource: 'desktop',
-            chromeMediaSourceId: sourceId
-          }
-        },
-        video: {
-          mandatory: {
-            chromeMediaSource: 'desktop',
-            chromeMediaSourceId: sourceId,
-            minWidth: 1280,
-            minHeight: 720,
-            maxWidth: 1920,
-            maxHeight: 1080
-          }
-        }
-      });
-    } else {
-      // Обычный браузер
-      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-    }
-
-    // Дальнейшая обработка потока (как у вас было)
-    S.screenStream = stream;
-    ui.localScreen.srcObject = stream;
-    ui.localScreen.hidden = false;
-    ui.btnStopShare.disabled = false;
-
-    stream.getTracks().forEach(t => S.pc && S.pc.addTrack(t, stream));
-    renegotiate();
-
-    stream.getTracks().forEach(t => t.onended = stopScreenShare);
-  } catch (e) {
-    alert('Экран: ' + e.message);
-  }
-}
-
-  function stopScreenShare(){
-    if(!S.screenStream) return;
-    try{ S.screenStream.getTracks().forEach(t=>t.stop()); }catch{}
-    S.screenStream = null;
-    ui.localScreen.srcObject = null; ui.localScreen.hidden = true; ui.btnStopShare.disabled = true;
+  
+  function stopStats() { 
+    if (S.statsTimer) { 
+      clearInterval(S.statsTimer); 
+      S.statsTimer = null; 
+    } 
   }
 
-  ui.btnShareScreen.onclick = startScreenShare;
-  ui.btnStopShare.onclick = stopScreenShare;
-
-  async function renegotiate(){
-    if(!S.pc || !S.dc) return;
-    const offer = await S.pc.createOffer();
-    await S.pc.setLocalDescription(offer);
-    await waitIceComplete(S.pc);
-    const payload = {type:'offer', sdp:S.pc.localDescription.toJSON(), ice:S.gathered};
-    S.dc.send(JSON.stringify(payload));
-  }
-  async function handleSignal(msg){
-    const data = JSON.parse(msg);
-    if(data.type==='offer'){
-      await S.pc.setRemoteDescription(data.sdp);
-      if(data.ice){ for(const c of data.ice){ try{ await S.pc.addIceCandidate(c); }catch{} } }
-      const answer = await S.pc.createAnswer();
-      await S.pc.setLocalDescription(answer);
-      await waitIceComplete(S.pc);
-      S.dc.send(JSON.stringify({type:'answer', sdp:S.pc.localDescription.toJSON(), ice:S.gathered}));
-    }
-    if(data.type==='answer'){
-      await S.pc.setRemoteDescription(data.sdp);
-      if(data.ice){ for(const c of data.ice){ try{ await S.pc.addIceCandidate(c); }catch{} } }
-    }
-  }
-
-  // ====== ANDROID / BACKGROUND TRICKS ======
-  async function enableWakeLock(){
-    try{
-      if ('wakeLock' in navigator) {
-        S.wakeLock = await navigator.wakeLock.request('screen');
-        S.wakeLock.addEventListener('release', ()=>console.log('WakeLock released'));
-      }
-    }catch(e){ console.warn('WakeLock error', e); }
-  }
-  async function disableWakeLock(){
-    try{
-      if (S.wakeLock){ await S.wakeLock.release(); S.wakeLock = null; }
-    }catch{}
-  }
-  function startKeepAlive(){
-    stopKeepAlive();
-    S.keepAliveTimer = setInterval(()=>{
-      kickAudioPipeline();
-      if (navigator.serviceWorker?.controller) {
-        navigator.serviceWorker.controller.postMessage({type:'ping', t: Date.now()});
-      }
-    }, 30000);
-  }
-  function stopKeepAlive(){
-    if(S.keepAliveTimer){ clearInterval(S.keepAliveTimer); S.keepAliveTimer=null; }
-  }
-  function kickAudioPipeline(){
-    try{ ui.remoteAudio.muted = false; ui.remoteAudio.play().catch(()=>{}); }catch{}
-    if (S.audioCtx && S.audioCtx.state !== 'running') {
-      S.audioCtx.resume().catch(()=>{});
-    }
-  }
-  document.addEventListener('visibilitychange', ()=>{
-    if (document.visibilityState === 'visible') kickAudioPipeline();
-  });
-  window.addEventListener('focus', kickAudioPipeline);
-  window.addEventListener('pageshow', kickAudioPipeline);
-
-  // ====== PWA установка ======
-  window.addEventListener('beforeinstallprompt', (e)=>{
-    e.preventDefault();
-    S.beforeInstallEvt = e;
-    ui.btnInstall.hidden = false;
-  });
-  ui.btnInstall.onclick = async ()=>{
-    if(!S.beforeInstallEvt) return;
-    ui.btnInstall.disabled = true;
-    await S.beforeInstallEvt.prompt();
-    S.beforeInstallEvt = null;
-    setTimeout(()=>{ ui.btnInstall.hidden = true; ui.btnInstall.disabled = false; }, 500);
-  };
-
-  // ====== Service Worker ======
-  if('serviceWorker' in navigator){
-    window.addEventListener('load', ()=>{
-      navigator.serviceWorker.register('./sw.js')
-        .then(()=>console.log('SW registered'))
-        .catch((e)=>console.warn('SW failed', e));
-    });
-    navigator.serviceWorker.addEventListener('message', (ev)=>{
-      if (ev.data && ev.data.type === 'NEW_VERSION') {
-        const ok = confirm('Доступно обновление. Перезапустить приложение сейчас?');
-        if (ok) location.reload();
-      }
+  // PWA
+  if('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(()=>{});
     });
   }
 
-  // ----- Init
+  // Инициализируем PeerJS при загрузке
+  initPeerJS();
   setStatus('ok','Готово к началу');
 })();
 </script>
