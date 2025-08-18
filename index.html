@@ -335,6 +335,11 @@
           stream.getTracks().forEach(track => {
             S.pc.addTrack(track, stream);
           });
+          
+          // If we're the caller, renegotiate connection
+          if (S.role === 'caller') {
+            makeCode();
+          }
         }
         
         return true;
@@ -423,18 +428,31 @@
 
   // ----- Fullscreen control
   function toggleFullscreen() {
+    if (!ui.remoteScreen.srcObject) {
+      console.log('Нет видео для отображения');
+      return;
+    }
+
     if (!document.fullscreenElement) {
-      ui.remoteScreenContainer.requestFullscreen().catch(err => {
-        console.error('Error attempting to enable fullscreen:', err);
-      });
-      ui.remoteScreenContainer.classList.add('fullscreen');
-      ui.btnFullscreen.textContent = 'Свернуть';
-      S.isFullscreen = true;
+      ui.remoteScreenContainer.requestFullscreen()
+        .then(() => {
+          ui.remoteScreenContainer.classList.add('fullscreen');
+          ui.btnFullscreen.textContent = 'Свернуть';
+          S.isFullscreen = true;
+        })
+        .catch(err => {
+          console.error('Ошибка при переходе в полноэкранный режим:', err);
+        });
     } else {
-      document.exitFullscreen();
-      ui.remoteScreenContainer.classList.remove('fullscreen');
-      ui.btnFullscreen.textContent = 'Полный экран';
-      S.isFullscreen = false;
+      document.exitFullscreen()
+        .then(() => {
+          ui.remoteScreenContainer.classList.remove('fullscreen');
+          ui.btnFullscreen.textContent = 'Полный экран';
+          S.isFullscreen = false;
+        })
+        .catch(err => {
+          console.error('Ошибка при выходе из полноэкранного режима:', err);
+        });
     }
   }
 
@@ -488,7 +506,10 @@
     }
     const pc = newPC();
     if (S.role === 'caller') {
-      const offer = await pc.createOffer({ offerToReceiveAudio: true });
+      const offer = await pc.createOffer({ 
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true
+      });
       await pc.setLocalDescription(offer);
       await waitIceComplete(pc);
       const payload = { v: 2, role: 'caller', sdp: pc.localDescription.toJSON(), ice: S.gathered, t: Date.now() };
