@@ -36,6 +36,8 @@
     .sep{height:1px;background:var(--line);margin:14px 0}
     textarea, input[type=text]{width:100%;padding:14px;border-radius:14px;background:#0a0f1a;color:var(--ink);border:1px solid var(--line);font-family:ui-monospace,Consolas,Menlo,monospace}
     textarea{min-height:128px;resize:vertical}
+    .pill{display:inline-flex;gap:8px;align-items:center;background:rgba(34,197,94,.12);color:#b7f7cf;border:1px solid rgba(34,197,94,.25);padding:6px 10px;border-radius:999px}
+    .k{display:inline-flex;align-items:center;gap:8px}
     .status{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px dashed var(--line);border-radius:12px;background:rgba(255,255,255,.03)}
     .status .dot{width:10px;height:10px;border-radius:50%;background:#64748b}
     .status.ok .dot{background:var(--ok)} .status.warn .dot{background:var(--warn)} .status.bad .dot{background:var(--danger)}
@@ -47,13 +49,14 @@
     .float-tip{font-size:12px;color:var(--muted)}
     .install{margin-left:auto}
     video{max-width:100%;width:100%;background:#000;border-radius:12px}
+    audio{display:block}
   </style>
 </head>
 <body>
 <div class="wrap">
   <div class="card">
     <h1>PeerCall — звонки и экран</h1>
-    <p class="lead">Для семьи и друзей. Без регистраций и бэкенда: обмен «кодами» вручную. Работает в мобильном браузере.</p>
+    <p class="lead">Звонки, статистика и демонстрация экрана. Без бэкенда: обмен «кодами» вручную. Работает в мобильном браузере.</p>
 
     <div class="status" id="appStatus">
       <span class="dot"></span><b id="stateText">Готово к началу</b>
@@ -67,13 +70,13 @@
 
     <div class="grid">
       <div class="col-4">
-        <h3>Шаг 1 — Выберите роль</h3>
+        <h3>Шаг 1 — Роль</h3>
         <div class="row">
           <button class="btn" id="btnCaller">Я звоню</button>
           <button class="btn" id="btnCallee">Мне звонят</button>
-          <label class="note"><input type="checkbox" id="ckStun" checked> Использовать STUN (рекомендуется)</label>
-          <label class="note"><input type="checkbox" id="ckMom"> Режим «для мамы» (больше шрифты, меньше деталей)</label>
         </div>
+        <label class="note"><input type="checkbox" id="ckStun" checked> Использовать STUN (рекомендуется)</label>
+        <label class="note"><input type="checkbox" id="ckMom"> Режим «для мамы» (крупнее шрифты)</label>
 
         <div class="sep"></div>
         <h3>Шаг 2 — Микрофон</h3>
@@ -97,27 +100,32 @@
       </div>
 
       <div class="col-8">
-        <h3>Обмен кодами (только один раз!)</h3>
-        <label class="note">Ваш код (передайте собеседнику):</label>
-        <textarea id="myCode" readonly placeholder="Нажмите «Сформировать код»…"></textarea>
-        <div class="row">
-          <button class="btn primary" id="btnMake">Сформировать код</button>
-          <button class="btn" id="btnCopy" disabled>Копировать</button>
-          <button class="btn ghost" id="btnShare" disabled>Поделиться…</button>
-        </div>
-
-        <label class="note">Код собеседника:</label>
-        <textarea id="peerCode" placeholder="Вставьте сюда код"></textarea>
-        <div class="row">
-          <button class="btn" id="btnAccept">Подтвердить код</button>
-          <button class="btn ghost" id="btnPaste">Вставить из буфера</button>
+        <h3>Шаг 4 — Обмен кодами (один раз)</h3>
+        <div class="grid">
+          <div class="col-12">
+            <label class="note">Ваш код (передайте собеседнику):</label>
+            <textarea id="myCode" readonly placeholder="Нажмите «Сформировать код»…"></textarea>
+            <div class="row">
+              <button class="btn primary" id="btnMake">Сформировать код</button>
+              <button class="btn" id="btnCopy" disabled>Копировать</button>
+              <button class="btn ghost" id="btnShare" disabled>Поделиться…</button>
+            </div>
+          </div>
+          <div class="col-12">
+            <label class="note">Код собеседника:</label>
+            <textarea id="peerCode" placeholder="Вставьте сюда код"></textarea>
+            <div class="row">
+              <button class="btn" id="btnAccept">Подтвердить код</button>
+              <button class="btn ghost" id="btnPaste">Вставить из буфера</button>
+            </div>
+          </div>
         </div>
 
         <div class="sep"></div>
 
         <video id="remoteScreen" autoplay playsinline></video>
-        <audio id="remoteAudio" autoplay playsinline></audio>
-        <div class="row">
+        <div class="row" style="margin-top:8px">
+          <audio id="remoteAudio" autoplay playsinline></audio>
           <button class="btn danger" id="btnHang" disabled>Завершить звонок</button>
           <span class="badge" id="statRtt">RTT: —</span>
           <span class="badge" id="statBit">Битрейт: —</span>
@@ -131,8 +139,8 @@
       <summary>Что важно знать</summary>
       <ul class="note">
         <li>Код одноразовый и действует только для текущего вызова.</li>
-        <li>Если связь не установилась, попробуйте включить Wi‑Fi или другую сеть. Для «железобетона» нужен TURN‑ретранслятор.</li>
-        <li>**Android**: установите как PWA и отключите энергосбережение для приложения, если система его «усыпляет».</li>
+        <li>Если связь не установилась, попробуйте Wi-Fi/другую сеть. Для «железобетона» нужен TURN.</li>
+        <li><b>Android</b>: установите как PWA и отключите энергосбережение для приложения, если система его «усыпляет».</li>
       </ul>
     </details>
   </div>
@@ -151,12 +159,11 @@
     myCode: $('myCode'), peerCode: $('peerCode'),
     btnMake: $('btnMake'), btnCopy: $('btnCopy'), btnShare: $('btnShare'),
     btnAccept: $('btnAccept'), btnPaste: $('btnPaste'),
-    remoteAudio: $('remoteAudio'), remoteScreen: $('remoteScreen'),
-    btnHang: $('btnHang'),
+    remoteAudio: $('remoteAudio'), btnHang: $('btnHang'),
     statRtt: $('statRtt'), statBit: $('statBit'), statJit: $('statJit'),
     btnInstall: $('btnInstall'),
     btnShareScreen: $('btnShareScreen'), btnStopShare: $('btnStopShare'),
-    localScreen: $('localScreen')
+    localScreen: $('localScreen'), remoteScreen: $('remoteScreen')
   };
 
   const S = {
@@ -193,7 +200,6 @@
     S.useStun = ui.ckStun.checked;
     ui.netHint.textContent = 'STUN: ' + (S.useStun?'включён':'выкл');
   };
-
   ui.ckMom.onchange = ()=>{
     document.body.style.fontSize = ui.ckMom.checked ? '18px' : '';
   };
@@ -212,7 +218,7 @@
   }
   ui.btnMic.onclick = ensureMic;
 
-  // ----- RTCPeerConnection
+  // ----- ICE servers
   function iceServers(){
     return S.useStun ? [
       {urls:'stun:stun.l.google.com:19302'},
@@ -222,24 +228,27 @@
     ] : [];
   }
 
+  // ----- RTCPeerConnection
   function newPC(){
     if(S.pc){ try{ S.pc.close(); }catch{} }
     S.gathered = [];
     const pc = new RTCPeerConnection({iceServers: iceServers()});
     S.pc = pc;
 
-    // Добавляем аудиодорожки
+    // Добавляем аудио из микрофона
     if(S.mic){ for(const t of S.mic.getTracks()) pc.addTrack(t, S.mic); }
 
     pc.ontrack = (ev)=>{
-      if(ev.track.kind==="video") ui.remoteScreen.srcObject = ev.streams[0];
-      if(ev.track.kind==="audio") {
+      if (ev.track.kind === 'video') {
+        ui.remoteScreen.srcObject = ev.streams[0];
+      }
+      if (ev.track.kind === 'audio') {
         ui.remoteAudio.srcObject = ev.streams[0];
         ui.remoteAudio.play().catch(()=>{});
         setupRemoteLevelMeter(ev.streams[0]);
+        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+        kickAudioPipeline();
       }
-      if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
-      kickAudioPipeline();
     };
 
     pc.onicecandidate = (ev)=>{ if(ev.candidate) S.gathered.push(ev.candidate.toJSON()); };
@@ -270,53 +279,7 @@
     return pc;
   }
 
-  // ----- Screen sharing (из первой версии)
-  ui.btnShareScreen.onclick = async()=>{
-    try{
-      const stream = await navigator.mediaDevices.getDisplayMedia({video:true,audio:true});
-      S.screenStream = stream;
-      ui.localScreen.srcObject = stream; ui.localScreen.hidden = false; ui.btnStopShare.disabled = false;
-
-      stream.getTracks().forEach(t=>S.pc.addTrack(t,stream));
-      renegotiate();
-
-      stream.getTracks().forEach(t=>t.onended = stopScreenShare);
-    }catch(e){ alert("Экран: " + e.message); }
-  };
-  function stopScreenShare(){
-    if(!S.screenStream) return;
-    S.screenStream.getTracks().forEach(t=>t.stop());
-    S.screenStream = null;
-    ui.localScreen.srcObject = null; ui.localScreen.hidden = true; ui.btnStopShare.disabled = true;
-  }
-  ui.btnStopShare.onclick = stopScreenShare;
-
-  // ----- Авто-ренеготиация через DataChannel (из первой версии)
-  async function renegotiate(){
-    if(!S.pc || !S.dc) return;
-    const offer = await S.pc.createOffer();
-    await S.pc.setLocalDescription(offer);
-    await waitIceComplete(S.pc);
-    const payload = {type:"offer",sdp:S.pc.localDescription.toJSON(),ice:S.gathered};
-    S.dc.send(JSON.stringify(payload));
-  }
-  async function handleSignal(msg){
-    const data = JSON.parse(msg);
-    if(data.type==="offer"){
-      await S.pc.setRemoteDescription(data.sdp);
-      if(data.ice){ for(const c of data.ice){ try{await S.pc.addIceCandidate(c);}catch{} } }
-      const answer = await S.pc.createAnswer();
-      await S.pc.setLocalDescription(answer);
-      await waitIceComplete(S.pc);
-      S.dc.send(JSON.stringify({type:"answer",sdp:S.pc.localDescription.toJSON(),ice:S.gathered}));
-    }
-    if(data.type==="answer"){
-      await S.pc.setRemoteDescription(data.sdp);
-      if(data.ice){ for(const c of data.ice){ try{await S.pc.addIceCandidate(c);}catch{} } }
-    }
-  }
-
-  // ----- base64 packers (для кодов)
+  // ----- base64 packers (url-safe)
   function pack(obj){
     const s = JSON.stringify(obj);
     const b64 = btoa(unescape(encodeURIComponent(s))).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
@@ -339,36 +302,41 @@
     });
   }
 
-  // ----- Make/Accept codes
+  // ----- Make/Accept codes (c учётом DC для ренегоциации)
   async function makeCode(){
     if(!S.role){ alert('Выберите роль'); return; }
     await ensureMic();
     if(S.role==='caller'){
       const pc = newPC();
-      // создаём DataChannel для сигнализации (из первой версии)
-      const dc = pc.createDataChannel("sig");
-      dc.onmessage = ev => handleSignal(ev.data);
+      // DataChannel для сигнализации (ренегоциации экрана)
+      const dc = pc.createDataChannel('sig');
+      dc.onmessage = (ev)=>handleSignal(ev.data);
       S.dc = dc;
 
       const offer = await pc.createOffer({offerToReceiveAudio:true,offerToReceiveVideo:true});
       await pc.setLocalDescription(offer);
       await waitIceComplete(pc);
-      const payload = {v:2, role:'caller', sdp: pc.localDescription.toJSON(), ice: S.gathered, t: Date.now()};
+      const payload = {v:3, role:'caller', sdp: pc.localDescription.toJSON(), ice: S.gathered, t: Date.now()};
       ui.myCode.value = pack(payload);
-      ui.btnCopy.disabled = false;
+      ui.btnCopy.disabled = true; // включим после клика, чтобы не копировать пустоту
+      // небольшая задержка, чтобы clipboard API корректно отработал на мобильных
+      setTimeout(()=>ui.btnCopy.disabled=false, 100);
       ui.btnShare.disabled = !navigator.share;
       setStatus('warn','Ждём код ответа');
     }else{
       if(!ui.peerCode.value.trim()){ alert('Сначала вставьте код собеседника'); return; }
       const ok = await acceptCode(true); if(!ok) return;
-      S.pc.ondatachannel = ev => {
+
+      // Получим DataChannel от инициатора
+      S.pc.ondatachannel = (ev)=>{
         S.dc = ev.channel;
-        S.dc.onmessage = e => handleSignal(e.data);
+        S.dc.onmessage = (e)=>handleSignal(e.data);
       };
+
       const answer = await S.pc.createAnswer();
       await S.pc.setLocalDescription(answer);
       await waitIceComplete(S.pc);
-      const payload = {v:2, role:'callee', sdp: S.pc.localDescription.toJSON(), ice: S.gathered, t: Date.now()};
+      const payload = {v:3, role:'callee', sdp: S.pc.localDescription.toJSON(), ice: S.gathered, t: Date.now()};
       ui.myCode.value = pack(payload);
       ui.btnCopy.disabled = false;
       ui.btnShare.disabled = !navigator.share;
@@ -442,13 +410,13 @@
       if(S.localAnalyser){
         const data = new Uint8Array(S.localAnalyser.frequencyBinCount);
         S.localAnalyser.getByteFrequencyData(data);
-        const v = Math.min(100, Math.round((data.reduce((a,b)=>a+b,0)/data.length)/2);
+        const v = Math.min(100, Math.round((data.reduce((a,b)=>a+b,0)/data.length)/2));
         ui.lvLocal.style.width = v + '%';
       }
       if(S.remoteAnalyser){
         const data = new Uint8Array(S.remoteAnalyser.frequencyBinCount);
         S.remoteAnalyser.getByteFrequencyData(data);
-        const v = Math.min(100, Math.round((data.reduce((a,b)=>a+b,0)/data.length)/2);
+        const v = Math.min(100, Math.round((data.reduce((a,b)=>a+b,0)/data.length)/2));
         ui.lvRemote.style.width = v + '%';
       }
       requestAnimationFrame(draw);
@@ -481,15 +449,59 @@
   }
   function stopStats(){ if(S.statsTimer){ clearInterval(S.statsTimer); S.statsTimer=null; } }
 
-  // ====== ANDROID / BACKGROUND TRICKS ======
+  // ====== ДЕМОНСТРАЦИЯ ЭКРАНА (интеграция с DC-ренегоциацией)
+  ui.btnShareScreen.onclick = async ()=>{
+    try{
+      const stream = await navigator.mediaDevices.getDisplayMedia({video:true,audio:true});
+      S.screenStream = stream;
+      ui.localScreen.srcObject = stream; ui.localScreen.hidden=false; ui.btnStopShare.disabled=false;
 
-  // Wake Lock API: держим экран/SoC бодрым во время звонка
+      stream.getTracks().forEach(t=>S.pc && S.pc.addTrack(t, stream));
+
+      // Ренегоциация через DataChannel
+      renegotiate();
+
+      stream.getTracks().forEach(t=>t.onended = stopScreenShare);
+    }catch(e){ alert('Экран: ' + e.message); }
+  };
+  function stopScreenShare(){
+    if(!S.screenStream) return;
+    try{ S.screenStream.getTracks().forEach(t=>t.stop()); }catch{}
+    S.screenStream = null;
+    ui.localScreen.srcObject = null; ui.localScreen.hidden = true; ui.btnStopShare.disabled = true;
+  }
+  ui.btnStopShare.onclick = stopScreenShare;
+
+  async function renegotiate(){
+    if(!S.pc || !S.dc) return;
+    const offer = await S.pc.createOffer();
+    await S.pc.setLocalDescription(offer);
+    await waitIceComplete(S.pc);
+    const payload = {type:'offer', sdp:S.pc.localDescription.toJSON(), ice:S.gathered};
+    S.dc.send(JSON.stringify(payload));
+  }
+  async function handleSignal(msg){
+    const data = JSON.parse(msg);
+    if(data.type==='offer'){
+      await S.pc.setRemoteDescription(data.sdp);
+      if(data.ice){ for(const c of data.ice){ try{ await S.pc.addIceCandidate(c); }catch{} } }
+      const answer = await S.pc.createAnswer();
+      await S.pc.setLocalDescription(answer);
+      await waitIceComplete(S.pc);
+      S.dc.send(JSON.stringify({type:'answer', sdp:S.pc.localDescription.toJSON(), ice:S.gathered}));
+    }
+    if(data.type==='answer'){
+      await S.pc.setRemoteDescription(data.sdp);
+      if(data.ice){ for(const c of data.ice){ try{ await S.pc.addIceCandidate(c); }catch{} } }
+    }
+  }
+
+  // ====== ANDROID / BACKGROUND TRICKS ======
   async function enableWakeLock(){
     try{
       if ('wakeLock' in navigator) {
         S.wakeLock = await navigator.wakeLock.request('screen');
         S.wakeLock.addEventListener('release', ()=>console.log('WakeLock released'));
-        console.log('WakeLock active');
       }
     }catch(e){ console.warn('WakeLock error', e); }
   }
@@ -498,9 +510,6 @@
       if (S.wakeLock){ await S.wakeLock.release(); S.wakeLock = null; }
     }catch{}
   }
-
-  // «Пинание» аудиотракта: краткий беззвучный нудж раз в 30с,
-  // чтобы вкладку не выгружали в глубокий idle на некоторых прошивках.
   function startKeepAlive(){
     stopKeepAlive();
     S.keepAliveTimer = setInterval(()=>{
@@ -513,16 +522,12 @@
   function stopKeepAlive(){
     if(S.keepAliveTimer){ clearInterval(S.keepAliveTimer); S.keepAliveTimer=null; }
   }
-
-  // Гарантированно поднимаем воспроизведение/AudioContext
   function kickAudioPipeline(){
     try{ ui.remoteAudio.muted = false; ui.remoteAudio.play().catch(()=>{}); }catch{}
     if (S.audioCtx && S.audioCtx.state !== 'running') {
       S.audioCtx.resume().catch(()=>{});
     }
   }
-
-  // Возврат из фона/разблокировка — оживляем звук
   document.addEventListener('visibilitychange', ()=>{
     if (document.visibilityState === 'visible') kickAudioPipeline();
   });
